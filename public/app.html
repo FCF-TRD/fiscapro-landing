@@ -2843,34 +2843,145 @@ function renderDeclarations(el){
 }
 
 window.genCA3=()=>{
-  const c=compute();
-  let txt=`DÉCLARATION CA3 — TVA\n${'═'.repeat(45)}\n${company.nom||''} | SIREN: ${company.siren||''}\nPériode: ${new Date().toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}\n\n`;
-  txt+=`LIGNE 01 — Opérations imposables (ventes): ${fmt(c.ca)}\n`;
-  txt+=`LIGNE 08 — Base HT taux normal 20%: ${fmt(c.ca)}\n`;
-  txt+=`LIGNE 09 — TVA brute taux normal: ${fmt(c.tvaC)}\n`;
-  txt+=`LIGNE 19 — TVA déductible sur biens et services: ${fmt(c.tvaD)}\n`;
-  txt+=`LIGNE 20 — TVA déductible sur immobilisations: ${fmt(0)}\n`;
-  txt+=`${'─'.repeat(40)}\n`;
-  txt+=`LIGNE 28 — TVA nette due: ${fmt(Math.max(0,c.tvaC-c.tvaD))}\n`;
-  txt+=`LIGNE 29 — Crédit de TVA: ${fmt(Math.max(0,c.tvaD-c.tvaC))}\n`;
-  dlFile(`CA3_${today()}.txt`,txt);
+  const c=compute();const t=TYPES[company?.type]||TYPES.SAS;const d=new Date().toLocaleDateString('fr-FR');const p=new Date().toLocaleDateString('fr-FR',{month:'long',year:'numeric'});
+  const h=docHeader('Declaration CA3 — TVA',p)+`
+  <div class="section"><div class="section-title">I — TVA Brute</div>
+  <div class="line-item"><span class="line-num">Ligne 01</span><span>Operations imposables (ventes HT)</span><span class="line-val">${fmt(c.ca)}</span></div>
+  <div class="line-item"><span class="line-num">Ligne 08</span><span>Base HT au taux normal 20%</span><span class="line-val">${fmt(c.ca)}</span></div>
+  <div class="line-item highlight-row"><span class="line-num">Ligne 09</span><span>TVA brute taux normal 20%</span><span class="line-val">${fmt(c.tvaC)}</span></div></div>
+  <div class="section"><div class="section-title">II — TVA Deductible</div>
+  <div class="line-item"><span class="line-num">Ligne 19</span><span>TVA deductible sur biens et services</span><span class="line-val">${fmt(c.tvaD)}</span></div>
+  <div class="line-item"><span class="line-num">Ligne 20</span><span>TVA deductible sur immobilisations</span><span class="line-val">${fmt(0)}</span></div></div>
+  <div class="section"><div class="section-title">III — TVA Nette</div>
+  <div class="line-item total-row" style="background:#0A6847;color:#fff;font-weight:800"><span class="line-num" style="color:#fff">Ligne 28</span><span>TVA nette due</span><span class="line-val">${fmt(Math.max(0,c.tvaC-c.tvaD))}</span></div>
+  ${c.tvaD>c.tvaC?`<div class="line-item" style="background:#F0F5F2"><span class="line-num">Ligne 29</span><span>Credit de TVA</span><span class="line-val" style="color:#0A6847;font-weight:800">${fmt(c.tvaD-c.tvaC)}</span></div>`:''}</div>
+  <div class="result-box"><div class="label">${c.tvaC>=c.tvaD?'TVA a reverser':'Credit de TVA en votre faveur'}</div><div class="value">${fmt(Math.abs(c.tvaC-c.tvaD))}</div></div>`;
+  openDocWindow('CA3 — TVA — '+p,h);
 };
 
 window.gen2065=()=>{
-  const c=compute();
-  let txt=`DÉCLARATION 2065 — IS\n${'═'.repeat(45)}\n${company.nom||''} | SIREN: ${company.siren||''}\nExercice: ${new Date().getFullYear()}\n\n`;
-  txt+=`I — RÉSULTAT FISCAL\nBénéfice comptable: ${fmt(c.ben)}\nRéintégrations: ${fmt(0)}\nDéductions: ${fmt(0)}\n${'─'.repeat(30)}\nRésultat fiscal: ${fmt(c.ben)}\n\n`;
-  txt+=`II — LIQUIDATION DE L'IS\nBénéfice taxé à 15% (≤${fmt(F.ISS)}): ${fmt(Math.min(Math.max(c.ben,0),F.ISS))}\nIS à 15%: ${fmt(Math.min(Math.max(c.ben,0),F.ISS)*F.ISR)}\nBénéfice taxé à 25%: ${fmt(Math.max(c.ben-F.ISS,0))}\nIS à 25%: ${fmt(Math.max(c.ben-F.ISS,0)*F.IS)}\n${'─'.repeat(30)}\nIS TOTAL: ${fmt(c.is)}\n`;
-  dlFile(`2065_${today()}.txt`,txt);
+  const c=compute();const t=TYPES[company?.type]||TYPES.SAS;const y=new Date().getFullYear();
+  const tr15=Math.min(Math.max(c.ben,0),F.ISS);const tr25=Math.max(c.ben-F.ISS,0);
+  const h=docHeader('Declaration 2065 — Impot sur les Societes','Exercice '+y)+`
+  <div class="section"><div class="section-title">I — Resultat Fiscal</div>
+  <table><tr><td>Benefice comptable</td><td class="right-align bold">${fmt(c.ben)}</td></tr>
+  <tr><td>Reintegrations extra-comptables</td><td class="right-align">${fmt(0)}</td></tr>
+  <tr><td>Deductions extra-comptables</td><td class="right-align">${fmt(0)}</td></tr>
+  <tr class="highlight-row"><td class="bold">Resultat fiscal</td><td class="right-align bold">${fmt(c.ben)}</td></tr></table></div>
+  <div class="section"><div class="section-title">II — Liquidation de l'IS</div>
+  <table><thead><tr><th>Tranche</th><th>Base</th><th>Taux</th><th>IS</th></tr></thead>
+  <tr><td>0 a ${fmt(F.ISS)}</td><td class="right-align">${fmt(tr15)}</td><td class="right-align">15%</td><td class="right-align">${fmt(tr15*F.ISR)}</td></tr>
+  <tr><td>Au-dela de ${fmt(F.ISS)}</td><td class="right-align">${fmt(tr25)}</td><td class="right-align">25%</td><td class="right-align">${fmt(tr25*F.IS)}</td></tr>
+  <tr class="total-row"><td class="bold" colspan="3">IS TOTAL</td><td class="right-align bold">${fmt(c.is)}</td></tr></table></div>
+  <div class="result-box"><div class="label">Impot sur les Societes — Exercice ${y}</div><div class="value">${fmt(c.is)}</div></div>
+  <div class="summary-box"><div class="summary-item"><div class="si-label">Taux effectif</div><div class="si-value">${c.ben>0?(c.is/c.ben*100).toFixed(1)+'%':'0%'}</div></div>
+  <div class="summary-item"><div class="si-label">Resultat net</div><div class="si-value">${fmt(c.net)}</div></div></div>`;
+  openDocWindow('2065 — IS — '+y,h);
 };
 
 window.gen2033=()=>{
-  const c=compute();
-  let txt=`LIASSE FISCALE SIMPLIFIÉE 2033\n${'═'.repeat(50)}\n${company.nom||''} | ${(TYPES[company?.type]||TYPES.SAS).f}\nSIREN: ${company.siren||''}\nExercice: ${new Date().getFullYear()}\n\n`;
-  txt+=`2033-A — BILAN SIMPLIFIÉ\nActif immobilisé: ${fmt(0)}\nActif circulant: ${fmt(c.ca)}\nTrésorerie: ${fmt(c.treso)}\n\nCapitaux propres: ${fmt((company.capital||0)+c.net)}\nDettes: ${fmt(c.dep)}\n\n`;
-  txt+=`2033-B — COMPTE DE RÉSULTAT\nVentes HT: ${fmt(c.ca)}\nAchats et charges: ${fmt(c.dep)}\nRémunérations: ${fmt(c.rem)}\nCharges sociales: ${fmt(c.chg)}\nRésultat d'exploitation: ${fmt(c.ben)}\nIS: ${fmt(c.is)}\nRésultat net: ${fmt(c.net)}\n`;
-  dlFile(`2033_liasse_${today()}.txt`,txt);
+  const c=compute();const t=TYPES[company?.type]||TYPES.SAS;const y=new Date().getFullYear();
+  const depByCat={};depenses.forEach(d=>{const k=d.cat||'Autre';depByCat[k]=(depByCat[k]||0)+(d.ht||0);});
+  let chRows='';Object.entries(depByCat).forEach(function(e){chRows+='<tr><td style="padding-left:20px">'+e[0]+'</td><td class="right-align">'+fmt(e[1])+'</td></tr>';});
+  const h=docHeader('Liasse Fiscale Simplifiee 2033','Exercice '+y)+`
+  <div class="section"><div class="section-title">2033-A — Bilan Simplifie</div>
+  <div class="summary-box"><div class="summary-item"><div class="si-label">Actif</div><div class="si-value">${fmt(c.ca+c.treso)}</div></div>
+  <div class="summary-item"><div class="si-label">Capitaux propres</div><div class="si-value">${fmt((company.capital||0)+c.net)}</div></div>
+  <div class="summary-item"><div class="si-label">Tresorerie</div><div class="si-value">${fmt(c.treso)}</div></div></div></div>
+  <div class="section"><div class="section-title">2033-B — Compte de Resultat</div>
+  <table><thead><tr><th>Poste</th><th class="right-align">Montant</th></tr></thead>
+  <tr class="highlight-row"><td class="bold">Produits d'exploitation</td><td class="right-align bold">${fmt(c.ca)}</td></tr>
+  <tr class="highlight-row"><td class="bold">Charges d'exploitation</td><td class="right-align bold">${fmt(c.dep+c.rem+c.chg)}</td></tr>
+  ${chRows}
+  <tr><td style="padding-left:20px">Remuneration ${t.dir}</td><td class="right-align">${fmt(c.rem)}</td></tr>
+  <tr><td style="padding-left:20px">Charges sociales</td><td class="right-align">${fmt(c.chg)}</td></tr>
+  <tr class="highlight-row"><td class="bold">Resultat d'exploitation</td><td class="right-align bold">${fmt(c.ben)}</td></tr>
+  <tr><td>Impot sur les societes</td><td class="right-align">${fmt(c.is)}</td></tr>
+  <tr class="total-row"><td class="bold">Resultat net</td><td class="right-align bold">${fmt(c.net)}</td></tr></table></div>
+  <div class="result-box"><div class="label">Resultat net de l'exercice ${y}</div><div class="value" style="color:${c.net>=0?'#0A6847':'#DC3545'}">${fmt(c.net)}</div></div>`;
+  openDocWindow('2033 — Liasse — '+y,h);
 };
+
+function docHeader(title,subtitle){
+  const t=TYPES[company?.type]||TYPES.SAS;const d=new Date().toLocaleDateString('fr-FR');
+  return'<div class="doc-header"><div class="left"><h1>'+title+'</h1><div class="subtitle">'+subtitle+' — Edite le '+d+'</div></div>'
+  +'<div class="right"><div class="company-name">'+(company.nom||'')+'</div>'+(t.f)+'<br>'+(company.adresse||'')+'<br>SIREN: '+(company.siren||'')+'</div></div>';
+}
+
+// ============ MODE URGENCE ============
+function renderUrgence(el){
+  el.innerHTML=`
+  <div class="top"><div><h2>🆘 Mode Urgence</h2><div class="top-s">Guide de survie si ton entreprise est en difficulte</div></div></div>
+
+  <div class="cd" style="border-left:3px solid var(--red);background:rgba(220,53,69,.03)">
+    <div style="font-size:16px;font-weight:800;color:var(--red);margin-bottom:8px">Diagnostic rapide</div>
+    <div style="font-size:13px;color:var(--tx2);margin-bottom:12px">Reponds honnetement — ca reste entre toi et ton ecran :</div>
+    <div style="display:grid;gap:6px">
+    ${['Peux-tu payer les salaires ce mois-ci ?','Peux-tu payer tes charges URSSAF ?','Peux-tu payer ton loyer/fournisseurs ?','As-tu plus de 30 jours de tresorerie devant toi ?','Tes clients te payent-ils dans les delais ?'].map((q,i)=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg2);border-radius:8px;border:1px solid var(--brd)">
+        <span style="font-size:13px;flex:1">${q}</span>
+        <span style="font-size:10px;color:var(--tx3)">Oui / Non</span>
+      </div>`).join('')}
+    </div>
+    <div class="al al-w" style="margin-top:12px"><span>⚠️</span><span>Si tu as repondu <b>Non</b> a 2 questions ou plus, lis la suite attentivement.</span></div>
+  </div>
+
+  <div class="cd" style="margin-top:12px">
+    <div style="font-size:16px;font-weight:800;color:var(--org);margin-bottom:12px">⚡ Actions immediates (cette semaine)</div>
+    <div style="display:grid;gap:8px">
+    ${[
+      {titre:'1. Appelle l\'URSSAF',desc:'Demande un echeancier de paiement. Ils accordent quasi-systematiquement des delais de 6-12 mois. Appelle AVANT d\'etre en retard.',tel:'3698'},
+      {titre:'2. Contacte ton SIE (impots)',desc:'Demande un delai de paiement pour l\'IS, la TVA ou la CFE. Formulaire en ligne sur impots.gouv.fr ou par courrier. Reduction possible des penalites.',tel:'impots.gouv.fr'},
+      {titre:'3. Relance tes impayes',desc:'Envoie une mise en demeure en recommande AR a tous tes clients en retard. Ca declenche les penalites legales (art. L441-10 C. com.) et ca te permet de provisionner.',tel:''},
+      {titre:'4. Demande le mediateur du credit',desc:'Si ta banque refuse un pret ou reduit ta ligne de credit, saisis le mediateur. C\'est gratuit et confidentiel. 70% de reussite.',tel:'mediateur-credit.banque-france.fr'},
+      {titre:'5. Contacte la CCSF',desc:'La Commission des Chefs de Services Financiers peut accorder un plan global de reglement de tes dettes fiscales et sociales en une seule demarche.',tel:'Via ta DRFIP'},
+    ].map(a=>`
+      <div style="padding:12px 14px;background:var(--bg3);border-radius:8px;border-left:3px solid var(--org)">
+        <div style="font-size:14px;font-weight:700;margin-bottom:4px">${a.titre}</div>
+        <div style="font-size:12px;color:var(--tx2);line-height:1.6">${a.desc}</div>
+        ${a.tel?`<div style="font-size:11px;color:var(--acc);font-weight:600;margin-top:4px">📞 ${a.tel}</div>`:''}
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="cd" style="margin-top:12px">
+    <div style="font-size:16px;font-weight:800;color:var(--blu);margin-bottom:12px">⚖️ Procedures legales (par ordre de gravite)</div>
+    <div style="display:grid;gap:8px">
+    ${[
+      {nom:'Mandat ad hoc',quand:'Tu sens venir les problemes mais tu payes encore',desc:'Un mandataire negocie confidentiellement avec tes creanciers. Personne ne sait que tu es en difficulte. Demande au president du tribunal de commerce.',couleur:'var(--grn)'},
+      {nom:'Conciliation',quand:'Tu as des difficultes mais pas encore en cessation de paiement (ou < 45j)',desc:'Un conciliateur negocie un accord global avec tes creanciers. Confidentiel. Duree max 5 mois. Cout : ~2 000-5 000€.',couleur:'var(--blu)'},
+      {nom:'Sauvegarde',quand:'Tu n\'es pas encore en cessation de paiement mais ca va arriver',desc:'Le tribunal gele toutes tes dettes pendant 6 mois (renouvelable). Tu continues a diriger. Plan de remboursement sur 10 ans max.',couleur:'var(--org)'},
+      {nom:'Redressement judiciaire (RJ)',quand:'Tu es en cessation de paiement (tu ne peux plus payer)',desc:'Le tribunal te donne 6 mois pour proposer un plan de continuation. Un administrateur t\'aide. Licenciements possibles.',couleur:'var(--red)'},
+      {nom:'Liquidation judiciaire (LJ)',quand:'Aucune chance de survie',desc:'L\'entreprise ferme. Un liquidateur vend les actifs et paye les creanciers. C\'est la fin. Evite-la a tout prix.',couleur:'var(--red)'},
+    ].map(p=>`
+      <div style="padding:12px 14px;background:var(--bg2);border-radius:8px;border-left:3px solid ${p.couleur}">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:14px;font-weight:700">${p.nom}</div>
+          <span class="tg" style="background:${p.couleur}15;color:${p.couleur};font-size:10px">${p.quand}</span>
+        </div>
+        <div style="font-size:12px;color:var(--tx2);margin-top:6px;line-height:1.6">${p.desc}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="cd" style="margin-top:12px">
+    <div style="font-size:16px;font-weight:800;margin-bottom:12px">📞 Contacts utiles</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Organisme</th><th>Contact</th><th class="hide-mob">Quand</th></tr></thead><tbody>
+    <tr><td style="font-weight:600">URSSAF</td><td>3698</td><td class="hide-mob">Delai cotisations</td></tr>
+    <tr><td style="font-weight:600">Impots (SIE)</td><td>impots.gouv.fr</td><td class="hide-mob">Delai IS/TVA/CFE</td></tr>
+    <tr><td style="font-weight:600">Mediateur du credit</td><td>mediateur-credit.banque-france.fr</td><td class="hide-mob">Refus bancaire</td></tr>
+    <tr><td style="font-weight:600">Mediateur des entreprises</td><td>mediateur-des-entreprises.fr</td><td class="hide-mob">Litige client/fournisseur</td></tr>
+    <tr><td style="font-weight:600">Tribunal de commerce</td><td>infogreffe.fr</td><td class="hide-mob">Procedures collectives</td></tr>
+    <tr><td style="font-weight:600">CCI / CMA</td><td>cci.fr</td><td class="hide-mob">Conseil gratuit</td></tr>
+    <tr><td style="font-weight:600">BPI France</td><td>bpifrance.fr</td><td class="hide-mob">Pret/garantie</td></tr>
+    </tbody></table></div>
+  </div>
+
+  <div style="text-align:center;margin-top:16px">
+    <button class="bt bt-p" onclick="goTo('assistant')" style="font-size:15px;padding:14px 28px">💬 Parler a l'Expert IA de ma situation</button>
+    <div style="font-size:11px;color:var(--tx3);margin-top:8px">Il connait ta situation financiere et peut te guider personnellement</div>
+  </div>`;
+}
 
 window.genExportSage=()=>{
   const ecritures=genEcrituresComptables();
