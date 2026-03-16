@@ -4350,26 +4350,52 @@ function renderComparaison(){
 
 // ============ SIMULATEUR EMBAUCHE ============
 function renderEmbauche(el){
-  var netSouhaite=window._embNet||2000;
-  var TAUX_PATRON=0.45;var TAUX_SAL=0.23;
-
-  function fromNet(net){var brut=Math.round(net/(1-TAUX_SAL));var chargesP=Math.round(brut*TAUX_PATRON);var coutM=brut+chargesP;return{brut:brut,chargesP:chargesP,net:Math.round(brut*(1-TAUX_SAL)),coutM:coutM};}
+  var netSouhaite=window._embNet||1500;
+  var SMIC_BRUT=1802;var TAUX_SAL=0.22;
+  // Brut from net: net = brut * (1 - taux_sal)
+  function netToBrut(net){return Math.round(net/(1-TAUX_SAL));}
+  // Reduction generale (ex-Fillon) — reduit les charges patronales pour les bas salaires
+  // Formule 2026: coeff = (0.3194/0.6) * (1.6 * SMIC/brut - 1) — plafonné à 0.3194
+  function reductionFillon(brut){
+    var ratio=SMIC_BRUT/brut;if(ratio<1/1.6)return 0;
+    var coeff=(0.3194/0.6)*(1.6*ratio-1);coeff=Math.max(0,Math.min(coeff,0.3194));
+    return Math.round(brut*coeff);
+  }
+  // Charges patronales detaillees
+  function detailCharges(brut){
+    var maladie=Math.round(brut*0.07);var vieillesseP=Math.round(brut*0.0855);var vieillesseD=Math.round(brut*0.0202);
+    var famille=Math.round(brut*0.0345);var chomage=Math.round(brut*0.0405);var at=Math.round(brut*0.015);
+    var fnal=Math.round(brut*0.005);var formation=Math.round(brut*0.0055);var csa=Math.round(brut*0.003);
+    var totalBrut=maladie+vieillesseP+vieillesseD+famille+chomage+at+fnal+formation+csa;
+    var fillon=reductionFillon(brut);
+    var totalNet=Math.max(0,totalBrut-fillon);
+    return{items:[
+      {l:'Assurance maladie',t:'7%',v:maladie},{l:'Vieillesse plafonnee',t:'8,55%',v:vieillesseP},{l:'Vieillesse deplafonnee',t:'2,02%',v:vieillesseD},
+      {l:'Allocations familiales',t:'3,45%',v:famille},{l:'Assurance chomage',t:'4,05%',v:chomage},{l:'Accidents du travail',t:'~1,5%',v:at},
+      {l:'FNAL',t:'0,5%',v:fnal},{l:'Formation professionnelle',t:'0,55%',v:formation},{l:'Contrib. solidarite autonomie',t:'0,3%',v:csa},
+    ],totalBrut:totalBrut,fillon:fillon,total:totalNet};
+  }
 
   var statuts=[
-    (function(){var c=fromNet(netSouhaite);return{id:'cdi',icon:'📋',nom:'CDI',desc:'Contrat a duree indeterminee',brut:c.brut,charges:c.chargesP,net:c.net,coutM:c.coutM,coutAn:c.coutM*13,aide:0,note:'13 mois (prime conventionnelle). Protection maximale pour le salarie.',best:false};})(),
-    (function(){var c=fromNet(netSouhaite);var preca=Math.round(c.brut*12*0.10);return{id:'cdd',icon:'📅',nom:'CDD',desc:'Contrat a duree determinee',brut:c.brut,charges:c.chargesP,net:c.net,coutM:c.coutM,coutAn:c.coutM*12+preca,aide:0,note:'+ prime precarite 10% en fin de contrat ('+fmt(preca)+'/an). Plus cher qu\'un CDI sur 12 mois.',best:false};})(),
-    (function(){var brutApp=Math.round(netSouhaite*0.6);var chargesP=Math.round(brutApp*0.20);var coutM=brutApp+chargesP;return{id:'apprenti',icon:'🎓',nom:'Apprenti',desc:'Contrat d\'apprentissage (< 26 ans)',brut:brutApp,charges:chargesP,net:brutApp,coutM:coutM,coutAn:coutM*12-5000,aide:5000,note:'Salaire = ~60% du net souhaite. Charges reduites. Aide 5 000€ la 1ere annee.',best:false};})(),
-    (function(){var gratif=Math.round(4.35*151.67);return{id:'stagiaire',icon:'🧑‍🎓',nom:'Stagiaire',desc:'Convention de stage (> 2 mois)',brut:0,charges:0,net:gratif,coutM:gratif,coutAn:gratif*6,aide:0,note:'Gratification min 4,35€/h = '+fmt(gratif)+'/mois. 0 charges. Max 6 mois.',best:false};})(),
-    (function(){var c=fromNet(netSouhaite);var coutM=Math.round(c.brut*2);return{id:'interim',icon:'⏱️',nom:'Interim',desc:'Via agence d\'interim',brut:c.brut,charges:0,net:c.net,coutM:coutM,coutAn:coutM*12,aide:0,note:'Coefficient agence x2 environ. Charges incluses. Flexibilite maximale.',best:false};})(),
-    (function(){var tjm=Math.round(netSouhaite/15);var coutM=tjm*20;return{id:'freelance',icon:'💻',nom:'Freelance',desc:'Prestataire independant (facture)',brut:0,charges:0,net:0,coutM:coutM,coutAn:coutM*12,aide:0,note:'TJM estime: '+fmt(tjm)+'/jour x 20j. 0 charges pour toi. Pas de lien de subordination.',best:false};})(),
+    (function(){var brut=netToBrut(netSouhaite);var ch=detailCharges(brut);var net=Math.round(brut*(1-TAUX_SAL));return{id:'cdi',icon:'📋',nom:'CDI',desc:'Contrat a duree indeterminee — cas minimal legal',brut:brut,charges:ch,net:net,coutM:brut+ch.total,coutAn:(brut+ch.total)*12,aide:0,
+      notes:['12 mois (pas de 13e mois obligatoire sauf convention)','Conges payes inclus dans le brut','Periode d\'essai : 2 mois (renouvelable 1 fois)','Preavis licenciement : 1-2 mois selon anciennete'],best:false};})(),
+    (function(){var brut=netToBrut(netSouhaite);var ch=detailCharges(brut);var net=Math.round(brut*(1-TAUX_SAL));var preca=Math.round(brut*0.10);return{id:'cdd',icon:'📅',nom:'CDD',desc:'Contrat a duree determinee',brut:brut,charges:ch,net:net,coutM:brut+ch.total,coutAn:(brut+ch.total)*12+preca*12,aide:0,
+      notes:['Prime precarite 10% du brut en fin de contrat','Indemnite compensatrice de conges payes (+10%)','Motif obligatoire (remplacement, surcroit, saison)','Renouvellement : 2 fois max, 18 mois max total'],best:false};})(),
+    (function(){var pctSmic=0.43;var brutApp=Math.round(SMIC_BRUT*pctSmic);var ch=detailCharges(brutApp);ch.total=0;ch.fillon=ch.totalBrut;return{id:'apprenti',icon:'🎓',nom:'Apprenti',desc:'Contrat d\'apprentissage — 16-29 ans',brut:brutApp,charges:ch,net:brutApp,coutM:brutApp,coutAn:brutApp*12-5000,aide:5000,
+      notes:['Salaire: 27% a 100% du SMIC selon age et annee','Exemple: 18 ans 1ere annee = 43% SMIC = '+fmt(brutApp)+'/mois','Exoneration quasi-totale de charges patronales','Aide a l\'embauche : 5 000€ (< 250 sal., niveau bac max)','Le salarie est en alternance ecole/entreprise'],best:false};})(),
+    (function(){var gratif=Math.round(4.35*151.67);return{id:'stagiaire',icon:'🧑‍🎓',nom:'Stagiaire',desc:'Convention de stage > 2 mois',brut:0,charges:{items:[],totalBrut:0,fillon:0,total:0},net:gratif,coutM:gratif,coutAn:gratif*6,aide:0,
+      notes:['Gratification obligatoire si stage > 2 mois','Minimum legal : 4,35€/h = '+fmt(gratif)+'/mois','Aucune charge patronale ni salariale','Duree max : 6 mois par organisme par an','Pas un salarie : pas de conges, pas de licenciement'],best:false};})(),
+    (function(){var brut=netToBrut(netSouhaite);var coutM=Math.round(brut*1.9);return{id:'interim',icon:'⏱️',nom:'Interim',desc:'Via agence de travail temporaire',brut:brut,charges:{items:[{l:'Tout inclus dans le tarif agence',t:'',v:coutM-brut}],totalBrut:coutM-brut,fillon:0,total:coutM-brut},net:Math.round(brut*(1-TAUX_SAL)),coutM:coutM,coutAn:coutM*12,aide:0,
+      notes:['L\'agence facture environ 1.8-2x le brut','Charges sociales incluses dans le tarif','Flexibilite totale : pas de preavis','Indemnite de fin de mission 10% (comme CDD)','Tu payes plus cher mais zero gestion admin'],best:false};})(),
+    (function(){var tjm=Math.round(netSouhaite/12);var coutM=tjm*20;return{id:'freelance',icon:'💻',nom:'Freelance / Independant',desc:'Prestation externe sur facture',brut:0,charges:{items:[{l:'Aucune charge pour toi',t:'0%',v:0}],totalBrut:0,fillon:0,total:0},net:0,coutM:coutM,coutAn:coutM*12,aide:0,
+      notes:['TJM estime : '+fmt(tjm)+'/jour x 20 jours','0€ de charges patronales pour toi','Le freelance gere ses propres charges','Attention au risque de requalification en salariat','Pas de lien de subordination (horaires, lieu)','Ideal pour missions ponctuelles ou expertise'],best:false};})(),
   ];
 
-  // Find best (lowest annual cost)
   var minCout=Math.min.apply(null,statuts.map(function(s){return s.coutAn>0?s.coutAn:999999;}));
   statuts.forEach(function(s){if(s.coutAn===minCout&&s.coutAn>0)s.best=true;});
 
   el.innerHTML=`
-  <div class="top"><div><h2>👥 Combien coute une embauche ?</h2><div class="top-s">Entre le salaire net souhaite, on calcule tout</div></div></div>
+  <div class="top"><div><h2>👥 Combien coute une embauche ?</h2><div class="top-s">Entre le net souhaite, on calcule tout pour chaque statut</div></div></div>
 
   <div class="cd" style="border-left:3px solid var(--acc);margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
@@ -4377,29 +4403,35 @@ function renderEmbauche(el){
         <div style="font-size:12px;font-weight:700;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Salaire net mensuel souhaite</div>
         <input class="inp" type="number" value="${netSouhaite}" style="font-size:20px;font-weight:800;padding:12px 16px" oninput="window._embNet=+this.value;renderEmbauche($('#page'))">
       </div>
-      <div style="font-size:12px;color:var(--tx3);max-width:250px">Ce que ton futur salarie veut recevoir sur son compte chaque mois. On calcule le reste.</div>
+      <div style="font-size:11px;color:var(--tx3);max-width:280px;line-height:1.5">Ce que le salarie recoit sur son compte. SMIC net 2026 : ~1 399€. On applique la <b>reduction Fillon</b> pour les bas salaires.</div>
     </div>
   </div>
 
-  <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
   ${statuts.map(function(s){return`
-    <div class="cd" style="padding:16px;margin-bottom:0;${s.best?'border:2px solid var(--acc);background:linear-gradient(135deg,var(--bg2),rgba(10,104,71,.03))':''}">
-      ${s.best?'<div style="font-size:10px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⭐ Le plus rentable pour toi</div>':''}
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+  <div class="cd" style="padding:0;margin-bottom:10px;overflow:hidden;${s.best?'border:2px solid var(--acc)':''}" >
+    <div style="padding:14px 16px;cursor:pointer" onclick="document.getElementById('embDetail_${s.id}').classList.toggle('hide')">
+      ${s.best?'<div style="font-size:10px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">⭐ Le plus rentable pour toi</div>':''}
+      <div style="display:flex;align-items:center;gap:10px">
         <span style="font-size:24px">${s.icon}</span>
-        <div><div style="font-size:15px;font-weight:800">${s.nom}</div><div style="font-size:11px;color:var(--tx3)">${s.desc}</div></div>
+        <div style="flex:1"><div style="font-size:15px;font-weight:800">${s.nom}</div><div style="font-size:11px;color:var(--tx3)">${s.desc}</div></div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:900;color:var(--red)">${fmt(s.coutM)}<span style="font-size:10px;color:var(--tx3)">/mois</span></div>
+          <div style="font-size:12px;font-weight:700;color:var(--acc)">${fmt(s.coutAn)}<span style="font-size:9px;color:var(--tx3)">/an</span></div>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
-        <div style="padding:8px;background:var(--bg3);border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:900;color:var(--red)">${fmt(s.coutM)}</div><div style="font-size:9px;color:var(--tx3)">Ca te coute / mois</div></div>
-        <div style="padding:8px;background:var(--bg3);border-radius:6px;text-align:center"><div style="font-size:16px;font-weight:900;color:var(--acc)">${fmt(s.coutAn)}</div><div style="font-size:9px;color:var(--tx3)">Cout annuel</div></div>
+      ${s.aide>0?'<div style="margin-top:6px"><span class="tg t-grn">🎁 Aide : -'+fmt(s.aide)+'</span></div>':''}
+    </div>
+    <div id="embDetail_${s.id}" class="${s.best?'':'hide'}" style="border-top:1px solid var(--brd);padding:14px 16px;background:var(--bg3)">
+      <div class="gr g2" style="gap:8px;margin-bottom:12px">
+        <div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--tx3)">Salaire brut</div><div style="font-size:14px;font-weight:800">${fmt(s.brut)}</div></div>
+        <div style="padding:8px 10px;background:var(--bg2);border-radius:6px"><div style="font-size:10px;color:var(--tx3)">Net salarie</div><div style="font-size:14px;font-weight:800;color:var(--blu)">${fmt(s.net||s.coutM)}</div></div>
       </div>
-      ${s.aide>0?`<div style="padding:4px 8px;background:rgba(10,104,71,.06);border-radius:4px;font-size:11px;color:var(--grn);font-weight:600;margin-bottom:8px">🎁 Aide deduite : -${fmt(s.aide)}</div>`:''}
-      <div style="font-size:11px;color:var(--tx2);line-height:1.5">${s.note}</div>
-      ${s.brut>0?`<div style="margin-top:8px;font-size:10px;color:var(--tx3)">Brut: ${fmt(s.brut)} | Charges patronales: ${fmt(s.charges)}</div>`:''}
-    </div>`;}).join('')}
-  </div>
+      ${s.charges.items.length>0?'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px;margin-bottom:6px">Detail charges patronales</div><table style="font-size:11px"><tbody>'+s.charges.items.map(function(c){return'<tr><td>'+c.l+'</td><td style="text-align:right;color:var(--tx3)">'+c.t+'</td><td style="text-align:right;font-weight:600">'+fmt(c.v)+'</td></tr>';}).join('')+(s.charges.fillon>0?'<tr style="color:var(--grn)"><td>Reduction generale (Fillon)</td><td></td><td style="text-align:right;font-weight:700">-'+fmt(s.charges.fillon)+'</td></tr>':'')+'<tr style="font-weight:700;background:var(--bg2)"><td>Total charges patronales</td><td></td><td style="text-align:right">'+fmt(s.charges.total)+'</td></tr></tbody></table>':''}
+      <div style="margin-top:10px;font-size:11px;color:var(--tx2);line-height:1.6">${s.notes.map(function(n){return'• '+n;}).join('<br>')}</div>
+    </div>
+  </div>`;}).join('')}
 
-  <div class="al al-i" style="margin-top:12px"><span>💡</span><span>Les taux sont indicatifs (2025/2026). Charges patronales ~45%, salariales ~23%. Varient selon convention collective et taille. <a href="#" onclick="goTo('assistant');return false" style="color:var(--acc);font-weight:600">Demande a l'IA pour un calcul precis.</a></span></div>`;
+  <div class="al al-i" style="margin-top:12px"><span>💡</span><span><b>Reduction Fillon :</b> pour les salaires jusqu'a 1,6 SMIC, l'Etat reduit les charges patronales. Plus le salaire est proche du SMIC, plus la reduction est forte. <a href="#" onclick="goTo('assistant');return false" style="color:var(--acc);font-weight:600">Demande a l'IA pour un cas precis.</a></span></div>`;
 }
 
 window.updateEmbauche=function(){renderEmbauche($('#page'));};
