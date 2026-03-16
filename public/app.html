@@ -205,8 +205,24 @@ let factures=load('factures',[]);
 let depenses=load('depenses',[]);
 let currentPage='dashboard';
 let charts={};
+let currentExercice=load('currentExercice',new Date().getFullYear());
 
 function persist(){save('company',company);save('factures',factures);save('depenses',depenses);}
+
+// Get all available exercice years from data
+function getExercices(){
+  const years=new Set();
+  factures.forEach(f=>{if(f.date){const y=new Date(f.date).getFullYear();if(y>2000)years.add(y);}});
+  depenses.forEach(d=>{if(d.date){const y=new Date(d.date).getFullYear();if(y>2000)years.add(y);}});
+  if(years.size===0)years.add(new Date().getFullYear());
+  return[...years].sort();
+}
+
+// Filter factures/depenses by exercice year
+function facturesExo(){return factures.filter(f=>f.date&&new Date(f.date).getFullYear()===currentExercice);}
+function depensesExo(){return depenses.filter(d=>d.date&&new Date(d.date).getFullYear()===currentExercice);}
+
+window.setExercice=(y)=>{currentExercice=+y;save('currentExercice',currentExercice);renderPage();};
 
 function autoCat(d){
   d=(d||'').toLowerCase();
@@ -258,19 +274,20 @@ function computeBankBalance(){
 // ============ COMPUTE ============
 function compute(){
   const t=TYPES[company?.type]||TYPES.SAS;
-  const ca=factures.reduce((s,f)=>s+(f.ht||0),0);
-  const dep=depenses.reduce((s,d)=>s+(d.ht||0),0);
+  const fExo=facturesExo();const dExo=depensesExo();
+  const ca=fExo.reduce((s,f)=>s+(f.ht||0),0);
+  const dep=dExo.reduce((s,d)=>s+(d.ht||0),0);
   const noTVA=company?.regimeTVA==='franchise'||company?.regimeTVA==='exoneree';
-  const tvaC=noTVA?0:factures.reduce((s,f)=>s+(f.ht||0)*((f.tva||0)/100),0);
-  const tvaD=noTVA?0:depenses.reduce((s,d)=>s+(d.ht||0)*((d.tva||0)/100),0);
+  const tvaC=noTVA?0:fExo.reduce((s,f)=>s+(f.ht||0)*((f.tva||0)/100),0);
+  const tvaD=noTVA?0:dExo.reduce((s,d)=>s+(d.ht||0)*((d.tva||0)/100),0);
   const rem=(company?.rem||0)*12;
   const chg=rem*t.cp;
   const ben=ca-dep-rem-chg;
   const is=ben>0?(ben<=F.ISS?ben*F.ISR:F.ISS*F.ISR+(ben-F.ISS)*F.IS):0;
   const net=ben-is;
   const treso=ca-dep-rem-chg-is-(tvaC-tvaD);
-  const encours=factures.filter(f=>!f.paye).reduce((s,f)=>s+(f.ht||0),0);
-  return{t,ca,dep,tvaC,tvaD,rem,chg,ben,is,net,treso,encours};
+  const encours=fExo.filter(f=>!f.paye).reduce((s,f)=>s+(f.ht||0),0);
+  return{t,ca,dep,tvaC,tvaD,rem,chg,ben,is,net,treso,encours,exercice:currentExercice,nbFactures:fExo.length,nbDepenses:dExo.length};
 }
 
 // ============ RENDER ENGINE ============
@@ -928,7 +945,12 @@ function renderDashboard(el){
   const months=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   el.innerHTML=`
   <div class="top"><div><h2>📊 Tableau de bord</h2><div class="top-s">${company.nom||t.l} — ${t.f}</div></div>
-    <div style="display:flex;gap:8px"><span class="tg t-grn">● À jour</span><span class="tg t-pur">${t.l}</span></div></div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700;background:var(--bg2)" onchange="setExercice(this.value)">
+        ${getExercices().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>Exercice ${y}</option>`).join('')}
+      </select>
+      <span class="tg t-pur">${t.l}</span>
+    </div></div>
 
   ${renderOnboarding()}
 
@@ -1001,8 +1023,9 @@ function renderDashboard(el){
 function echeance(l,v,col){return`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--brd)"><span style="font-size:12px">${l}</span><span style="font-weight:700;color:${col}">${fmt(v)}</span></div>`;}
 
 function initCharts(c,months,bank){
-  const caM=months.map((_,i)=>factures.filter(f=>new Date(f.date).getMonth()===i).reduce((s,f)=>s+(f.ht||0),0));
-  const depM=months.map((_,i)=>depenses.filter(d=>new Date(d.date).getMonth()===i).reduce((s,d)=>s+(d.ht||0),0));
+  const fExo=facturesExo();const dExo=depensesExo();
+  const caM=months.map((_,i)=>fExo.filter(f=>new Date(f.date).getMonth()===i).reduce((s,f)=>s+(f.ht||0),0));
+  const depM=months.map((_,i)=>dExo.filter(d=>new Date(d.date).getMonth()===i).reduce((s,d)=>s+(d.ht||0),0));
   let cum=0;const tresoM=months.map((_,i)=>{cum+=caM[i]-depM[i];return cum;});
   Object.values(charts).forEach(ch=>{try{ch.destroy()}catch{}});charts={};
   const e1=$('#ch1'),e2=$('#ch2'),e3=$('#ch3');
@@ -1028,11 +1051,20 @@ function chartOpts(){const mob=window.innerWidth<600;return{responsive:true,main
 let eTab='factures',eSubTab='liste';
 
 function renderEcritures(el){
-  const items=eTab==='factures'?factures:depenses;
+  const allItems=eTab==='factures'?factures:depenses;
+  const items=allItems.filter(i=>i.date&&new Date(i.date).getFullYear()===currentExercice);
   const cats=eTab==='factures'?CATREV:CATDEP;
+  const fCount=factures.filter(f=>f.date&&new Date(f.date).getFullYear()===currentExercice).length;
+  const dCount=depenses.filter(d=>d.date&&new Date(d.date).getFullYear()===currentExercice).length;
   el.innerHTML=`
-  <div class="top"><h2>📄 Écritures comptables</h2><button class="bt bt-p" onclick="openNewEntry()">+ Ajouter</button></div>
-  <div class="tabs"><div class="tab ${eTab==='factures'?'on':''}" onclick="eTab='factures';renderPage()">Recettes (${factures.length})</div><div class="tab ${eTab==='depenses'?'on':''}" onclick="eTab='depenses';renderPage()">Dépenses (${depenses.length})</div></div>
+  <div class="top"><div><h2>📄 Ecritures ${currentExercice}</h2></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700" onchange="setExercice(this.value)">
+        ${getExercices().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <button class="bt bt-p sm" onclick="openNewEntry()">+ Ajouter</button>
+    </div></div>
+  <div class="tabs"><div class="tab ${eTab==='factures'?'on':''}" onclick="eTab='factures';renderPage()">Recettes (${fCount})</div><div class="tab ${eTab==='depenses'?'on':''}" onclick="eTab='depenses';renderPage()">Depenses (${dCount})</div></div>
   <div class="tabs" style="margin-bottom:14px"><div class="tab ${eSubTab==='liste'?'on':''}" onclick="eSubTab='liste';renderPage()">📋 Liste</div><div class="tab ${eSubTab==='pdf'?'on':''}" onclick="eSubTab='pdf';renderPage()">📄 Import PDF</div><div class="tab ${eSubTab==='ocr'?'on':''}" onclick="eSubTab='ocr';renderPage()">📸 Scanner</div></div>
   <div id="eContent"></div>`;
   if(eSubTab==='liste')renderEntryList($('#eContent'),items);
@@ -1204,10 +1236,14 @@ window.saveOCR=()=>{
 // ============ BILAN ============
 function renderBilan(el){
   const c=compute();const t=c.t;
-  const depByCat={};depenses.forEach(d=>{const k=d.cat||'Autre';depByCat[k]=(depByCat[k]||0)+(d.ht||0);});
-  const revByCat={};factures.forEach(f=>{const k=f.cat||'Autre';revByCat[k]=(revByCat[k]||0)+(f.ht||0);});
+  const dExo=depensesExo();const fExo=facturesExo();
+  const depByCat={};dExo.forEach(d=>{const k=d.cat||'Autre';depByCat[k]=(depByCat[k]||0)+(d.ht||0);});
+  const revByCat={};fExo.forEach(f=>{const k=f.cat||'Autre';revByCat[k]=(revByCat[k]||0)+(f.ht||0);});
   el.innerHTML=`
-  <div class="top"><h2>📋 Bilan & Documents</h2></div>
+  <div class="top"><div><h2>📋 Bilan ${currentExercice}</h2></div>
+    <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700" onchange="setExercice(this.value)">
+      ${getExercices().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>${y}</option>`).join('')}
+    </select></div>
   <div class="cd"><div class="cd-t">Compte de résultat simplifié</div>
   <div class="tbl-wrap"><table><thead><tr><th>Poste</th><th style="text-align:right">Montant</th></tr></thead><tbody>
     <tr style="background:rgba(16,185,129,.04)"><td style="font-weight:700">PRODUITS D'EXPLOITATION</td><td style="text-align:right;font-weight:800;color:var(--grn)">${fmt(c.ca)}</td></tr>
@@ -3090,8 +3126,9 @@ function renderPrevisionnel(el){
   const c=compute();const t=c.t;
   const months=['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
   const now=new Date().getMonth();
-  const caM=months.map((_,i)=>factures.filter(f=>new Date(f.date).getMonth()===i).reduce((s,f)=>s+(f.ht||0),0));
-  const depM=months.map((_,i)=>depenses.filter(d=>new Date(d.date).getMonth()===i).reduce((s,d)=>s+(d.ht||0),0));
+  const fExo=facturesExo();const dExo=depensesExo();
+  const caM=months.map((_,i)=>fExo.filter(f=>new Date(f.date).getMonth()===i).reduce((s,f)=>s+(f.ht||0),0));
+  const depM=months.map((_,i)=>dExo.filter(d=>new Date(d.date).getMonth()===i).reduce((s,d)=>s+(d.ht||0),0));
   // Prévision: moyenne des mois passés pour les mois futurs
   const pastCA=caM.filter((_,i)=>i<=now&&caM[i]>0);const avgCA=pastCA.length?pastCA.reduce((a,b)=>a+b,0)/pastCA.length:0;
   const pastDep=depM.filter((_,i)=>i<=now&&depM[i]>0);const avgDep=pastDep.length?pastDep.reduce((a,b)=>a+b,0)/pastDep.length:0;
