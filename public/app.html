@@ -2657,7 +2657,7 @@ function renderFacturation(el){
     const expired=d.status==='expire'||(d.status!=='accepte'&&new Date(d.validite)<new Date());
     return`<tr><td style="font-weight:700">D-${String(d.num).padStart(4,'0')}</td><td style="white-space:nowrap">${fmtD(d.date)}</td><td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.clientName}</td><td class="hide-mob" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.objet||''}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${fmt(d.totalTTC)}</td>
     <td>${d.status==='accepte'?'<span class="tg t-grn">Accepte</span>':expired?'<span class="tg t-red">Expire</span>':'<span class="tg t-org">En attente</span>'}</td>
-    <td><div style="display:flex;gap:3px"><button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Facture</button>`:''}</div></td></tr>`;
+    <td><div style="display:flex;gap:3px"><button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Facture</button>`:''}<button class="bt bt-d sm" onclick="delDevis(${d.num})">✕</button></div></td></tr>`;
   }).join('')}</tbody></table></div>
   <div class="mob-only mob-txn" style="display:none">
   ${devis.sort((a,b)=>b.num-a.num).map(d=>{
@@ -2665,7 +2665,7 @@ function renderFacturation(el){
     return`<div class="txn-card">
       <div class="txn-row"><div><div class="txn-desc">D-${String(d.num).padStart(4,'0')} — ${d.clientName}</div><div class="txn-date">${fmtD(d.date)} — ${d.objet||''}</div></div>
       <div class="txn-amt" style="color:var(--blu)">${fmt(d.totalTTC)}</div></div>
-      <div class="txn-meta">${d.status==='accepte'?'<span class="tg t-grn">Accepte</span>':expired?'<span class="tg t-red">Expire</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Fact.</button>`:''}</div>
+      <div class="txn-meta">${d.status==='accepte'?'<span class="tg t-grn">Accepte</span>':expired?'<span class="tg t-red">Expire</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Fact.</button>`:''}<button class="bt bt-d sm" onclick="delDevis(${d.num})">✕</button></div>
     </div>`;}).join('')}
   </div></div>`}
   `:`
@@ -2676,7 +2676,7 @@ function renderFacturation(el){
     const overdue=!inv.paid&&new Date(inv.due)<new Date();
     return`<tr><td style="font-weight:700">F-${String(inv.num).padStart(4,'0')}</td><td style="white-space:nowrap">${fmtD(inv.date)}</td><td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inv.clientName}</td><td class="hide-mob" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${inv.objet}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${fmt(inv.totalTTC)}</td>
     <td>${inv.paid?'<span class="tg t-grn">Payée</span>':overdue?'<span class="tg t-red">Retard</span>':'<span class="tg t-org">Attente</span>'}</td>
-    <td><div style="display:flex;gap:3px"><button class="bt bt-p sm" onclick="dlInvoicePDF(${inv.num})">PDF</button>${!inv.paid?`<button class="bt bt-g sm" onclick="markPaid(${inv.num})">✓</button>`:''}</div></td></tr>`;
+    <td><div style="display:flex;gap:3px"><button class="bt bt-p sm" onclick="dlInvoicePDF(${inv.num})">PDF</button>${!inv.paid?`<button class="bt bt-g sm" onclick="markPaid(${inv.num})">✓</button>`:''}<button class="bt bt-d sm" onclick="delInvoice(${inv.num})">✕</button></div></td></tr>`;
   }).join('')}</tbody></table></div>
   <div class="mob-only mob-txn" style="display:none">
   ${invs.sort((a,b)=>b.num-a.num).map(inv=>{
@@ -2684,7 +2684,7 @@ function renderFacturation(el){
     return`<div class="txn-card">
       <div class="txn-row"><div><div class="txn-desc">F-${String(inv.num).padStart(4,'0')} — ${inv.clientName}</div><div class="txn-date">${fmtD(inv.date)} — ${inv.objet||''}</div></div>
       <div class="txn-amt" style="color:var(--grn)">${fmt(inv.totalTTC)}</div></div>
-      <div class="txn-meta">${inv.paid?'<span class="tg t-grn">Payée</span>':overdue?'<span class="tg t-red">Retard</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlInvoicePDF(${inv.num})">PDF</button>${!inv.paid?`<button class="bt bt-g sm" onclick="markPaid(${inv.num})">✓</button>`:''}</div>
+      <div class="txn-meta">${inv.paid?'<span class="tg t-grn">Payée</span>':overdue?'<span class="tg t-red">Retard</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlInvoicePDF(${inv.num})">PDF</button>${!inv.paid?`<button class="bt bt-g sm" onclick="markPaid(${inv.num})">✓</button>`:''}<button class="bt bt-d sm" onclick="delInvoice(${inv.num})">✕</button></div>
     </div>`;}).join('')}
   </div></div>`}`}`;
 }
@@ -2743,6 +2743,16 @@ window.saveInvoice=()=>{
   // Also add to factures
   factures.push({id:uid(),type:'facture',date:inv.date,client:inv.clientName,desc:inv.objet,ht:totalHT,tva:20,cat:'Prestation service',paye:false,src:'facture'});
   persist();$('.modal-bg')?.remove();renderPage();
+};
+
+window.delInvoice=(num)=>{
+  if(!confirm('Supprimer la facture F-'+String(num).padStart(4,'0')+' ?'))return;
+  const invs=load('invoices',[]).filter(i=>i.num!==num);save('invoices',invs);renderPage();
+};
+
+window.delDevis=(num)=>{
+  if(!confirm('Supprimer le devis D-'+String(num).padStart(4,'0')+' ?'))return;
+  const devs=load('devisList',[]).filter(d=>d.num!==num);save('devisList',devs);renderPage();
 };
 
 window.markPaid=(num)=>{
