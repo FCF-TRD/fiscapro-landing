@@ -4448,17 +4448,15 @@ function renderAnomalies(){
 // ============ COMPARAISON N vs N-1 ============
 function renderComparaison(){
   const exos=getExercices();
-  if(exos.length<2)return'';
   const prevYear=currentExercice-1;
-  if(!exos.includes(prevYear))return'';
+  const hasExoData=exos.includes(prevYear);
+  const hasHistData=!!load('historique_'+prevYear,null);
+  if(!hasExoData&&!hasHistData)return'';
 
   // Compute N
-  const cN=compute();
+  const cN=getHistoriqueYear(currentExercice);
   // Compute N-1
-  const savedExo=currentExercice;
-  currentExercice=prevYear;
-  const cN1=compute();
-  currentExercice=savedExo;
+  const cN1=getHistoriqueYear(prevYear);
 
   const compare=(label,vN,vN1)=>{
     const diff=vN-vN1;const pct=vN1!==0?((diff/Math.abs(vN1))*100).toFixed(1):vN>0?'100':'0';
@@ -4692,6 +4690,7 @@ render=function(){
       <div class="nav-s">Plus</div>
       ${navItem('compta','📒','Grand Livre')}
       ${navItem('simul','📊','Simulateurs')}
+      ${navItem('archives','📦','Archives & historique')}
       ${navItem('statuts','📜','Statuts & Docs')}
       ${navItem('settings','⚙️','Parametres')}
       ${navItem('juridique','⚖️','Documents juridiques')}
@@ -4733,6 +4732,7 @@ renderPage=function(){
     case'juridique':renderJuridique(pg);break;
     case'urgence':renderUrgence(pg);break;
     case'embauche':renderEmbauche(pg);break;
+    case'archives':renderArchives(pg);break;
   }
 };
 
@@ -6007,6 +6007,343 @@ function getDashboardTips(){
 
   return tips.slice(0,4);
 }
+
+// ============ HISTORIQUE & ARCHIVES ============
+function getHistoriqueYear(year){
+  // Check saved historical data first
+  const hist=load('historique_'+year,null);
+  if(hist)return{ca:hist.ca||0,dep:hist.depenses||0,net:hist.resultat||0,is:hist.is||0,tvaC:hist.tvaCollectee||0,tvaD:hist.tvaDeductible||0,treso:(hist.ca||0)-(hist.depenses||0)-(hist.is||0),encours:0,ben:hist.resultat||0,rem:0,chg:0,t:TYPES[company?.type]||TYPES.SAS,exercice:year,nbFactures:0,nbDepenses:0,fromHistorique:true};
+  // Otherwise compute from entries
+  const savedExo=currentExercice;
+  currentExercice=year;
+  const c=compute();
+  currentExercice=savedExo;
+  return c;
+}
+
+function renderArchives(el){
+  const allHist=[];
+  for(let y=2015;y<=new Date().getFullYear();y++){
+    const h=load('historique_'+y,null);
+    if(h)allHist.push({year:y,...h});
+  }
+  // Also include years from entries
+  const exos=getExercices();
+  exos.forEach(y=>{
+    if(!allHist.find(h=>h.year===y)){
+      const c=getHistoriqueYear(y);
+      if(c.ca>0||c.dep>0)allHist.push({year:y,ca:c.ca,depenses:c.dep,resultat:c.net,is:c.is,tvaCollectee:c.tvaC,tvaDeductible:c.tvaD,fromEntries:true});
+    }
+  });
+  allHist.sort((a,b)=>a.year-b.year);
+
+  el.innerHTML=`
+  <div class="top"><div><h2>📦 Archives & Historique</h2><div class="top-s">Importez d'anciens documents et construisez votre historique financier</div></div></div>
+
+  <div class="tabs" id="archTabs">
+    <div class="tab ${(window._archTab||'import')==='import'?'on':''}" onclick="window._archTab='import';goTo('archives')">📂 Import documents</div>
+    <div class="tab ${window._archTab==='manual'?'on':''}" onclick="window._archTab='manual';goTo('archives')">✏️ Saisie manuelle</div>
+    <div class="tab ${window._archTab==='history'?'on':''}" onclick="window._archTab='history';goTo('archives')">📊 Historique</div>
+  </div>
+
+  <div id="archContent"></div>`;
+
+  const ct=$('#archContent');
+  if(!ct)return;
+  const tab=window._archTab||'import';
+
+  if(tab==='import'){
+    ct.innerHTML=`
+    <div class="cd">
+      <div class="cd-t">📂 Importer des documents comptables anciens</div>
+      <p style="font-size:12px;color:var(--tx2);margin-bottom:14px">Importez vos bilans, liasses fiscales, declarations — FiscaPro extraira automatiquement les donnees cles.</p>
+      ${uploadZone('archImport','.pdf',true,'window.archImportFiles','Deposez vos documents ici','Bilans, liasses fiscales, declarations TVA, comptes de resultat (PDF)')}
+      <div id="archImportStatus" style="margin-top:14px"></div>
+      <div id="archImportResults" style="margin-top:14px"></div>
+    </div>
+
+    <div class="cd" style="margin-top:16px">
+      <div class="cd-t">ℹ️ Documents acceptes</div>
+      <div class="gr g3" style="gap:10px">
+        <div style="padding:12px;background:var(--bg3);border-radius:8px;text-align:center">
+          <div style="font-size:24px;margin-bottom:4px">📋</div>
+          <div style="font-size:12px;font-weight:700">Bilan comptable</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:2px">Actif, passif, capitaux propres</div>
+        </div>
+        <div style="padding:12px;background:var(--bg3);border-radius:8px;text-align:center">
+          <div style="font-size:24px;margin-bottom:4px">📄</div>
+          <div style="font-size:12px;font-weight:700">Liasse fiscale</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:2px">Cerfa 2050 a 2059, 2033</div>
+        </div>
+        <div style="padding:12px;background:var(--bg3);border-radius:8px;text-align:center">
+          <div style="font-size:24px;margin-bottom:4px">🏛️</div>
+          <div style="font-size:12px;font-weight:700">Declarations fiscales</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:2px">IS, TVA CA12/CA3, CVAE</div>
+        </div>
+      </div>
+    </div>`;
+  } else if(tab==='manual'){
+    const editYear=window._archEditYear||null;
+    const editData=editYear?load('historique_'+editYear,null):null;
+    ct.innerHTML=`
+    <div class="cd">
+      <div class="cd-t">✏️ Saisie manuelle des donnees historiques</div>
+      <p style="font-size:12px;color:var(--tx2);margin-bottom:14px">Entrez les chiffres cles d'un exercice anterieur pour construire votre historique.</p>
+      <div class="gr g2">
+        <div class="fg"><label>Annee de l'exercice</label>
+          <select class="inp" id="archYear" onchange="window._archEditYear=null;document.getElementById('archYear').value=this.value">
+            ${Array.from({length:6},(_,i)=>2020+i).map(y=>`<option value="${y}" ${(editData?editYear:(window._archFormYear||''))==y?'selected':''}>${y}</option>`).join('')}
+          </select>
+        </div>
+        <div></div>
+      </div>
+      <div class="gr g2">
+        <div class="fg"><label>Chiffre d'affaires HT (€)</label><input class="inp" type="number" id="archCA" placeholder="Ex: 150000" value="${editData?editData.ca:''}"></div>
+        <div class="fg"><label>Total depenses HT (€)</label><input class="inp" type="number" id="archDep" placeholder="Ex: 80000" value="${editData?editData.depenses:''}"></div>
+        <div class="fg"><label>Resultat net (€)</label><input class="inp" type="number" id="archRes" placeholder="Ex: 45000" value="${editData?editData.resultat:''}"></div>
+        <div class="fg"><label>IS paye (€)</label><input class="inp" type="number" id="archIS" placeholder="Ex: 8000" value="${editData?editData.is:''}"></div>
+        <div class="fg"><label>TVA collectee (€)</label><input class="inp" type="number" id="archTVAC" placeholder="Ex: 30000" value="${editData?editData.tvaCollectee:''}"></div>
+        <div class="fg"><label>TVA deductible (€)</label><input class="inp" type="number" id="archTVAD" placeholder="Ex: 16000" value="${editData?editData.tvaDeductible:''}"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="bt bt-p" onclick="window.archSaveManual()">💾 Enregistrer</button>
+        ${editData?`<button class="bt bt-s" onclick="window._archEditYear=null;goTo('archives')">Annuler</button>`:''}
+      </div>
+    </div>
+    ${editData?`<div class="al al-i" style="margin-top:10px"><span>📝</span><span>Modification de l'exercice ${editYear}</span></div>`:''}`;
+  } else if(tab==='history'){
+    ct.innerHTML=`
+    <div class="cd">
+      <div class="cd-t">📊 Historique financier</div>
+      ${allHist.length===0?`<div class="al al-w"><span>📭</span><span>Aucun historique disponible. Importez des documents ou saisissez manuellement vos donnees.</span></div>`:`
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Annee</th><th>CA HT</th><th>Depenses</th><th>Resultat</th><th>IS</th><th>TVA nette</th><th>Source</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${allHist.map(h=>{
+              const tvaN=(h.tvaCollectee||0)-(h.tvaDeductible||0);
+              return`<tr>
+                <td style="font-weight:700">${h.year}</td>
+                <td>${fmt(h.ca)}</td>
+                <td>${fmt(h.depenses)}</td>
+                <td style="font-weight:700;color:${(h.resultat||0)>=0?'var(--grn)':'var(--red)'}">${fmt(h.resultat)}</td>
+                <td>${fmt(h.is)}</td>
+                <td>${fmt(tvaN)}</td>
+                <td><span class="tg ${h.fromEntries?'t-blu':'t-grn'}">${h.fromEntries?'Ecritures':'Manuel/Import'}</span></td>
+                <td>${!h.fromEntries?`<button class="bt bt-s sm" onclick="window.archEdit(${h.year})">✏️</button> <button class="bt bt-d sm" onclick="window.archDelete(${h.year})">🗑️</button>`:'-'}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div id="archChart" style="margin-top:20px"><canvas id="archChartCanvas" height="280"></canvas></div>
+      `}
+    </div>`;
+    // Draw chart if data
+    if(allHist.length>1){
+      setTimeout(()=>{
+        const canvas=document.getElementById('archChartCanvas');
+        if(!canvas||typeof Chart==='undefined')return;
+        if(charts._archHist)try{charts._archHist.destroy();}catch(e){}
+        charts._archHist=new Chart(canvas,{
+          type:'bar',
+          data:{
+            labels:allHist.map(h=>String(h.year)),
+            datasets:[
+              {label:'CA HT',data:allHist.map(h=>h.ca||0),backgroundColor:'rgba(10,104,71,.7)',borderRadius:4},
+              {label:'Depenses',data:allHist.map(h=>h.depenses||0),backgroundColor:'rgba(220,53,69,.5)',borderRadius:4},
+              {label:'Resultat',data:allHist.map(h=>h.resultat||0),backgroundColor:'rgba(37,99,235,.6)',borderRadius:4,type:'line',borderColor:'rgba(37,99,235,.8)',borderWidth:2,fill:false,pointRadius:4}
+            ]
+          },
+          options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:11,family:'Inter'}}},title:{display:true,text:'Evolution pluriannuelle',font:{size:14,weight:'bold',family:'Inter'},color:'#1F2937'}},scales:{y:{ticks:{callback:v=>fmt(v),font:{size:10}},grid:{color:'rgba(0,0,0,.05)'}},x:{grid:{display:false}}}}
+        });
+      },100);
+    }
+  }
+}
+
+// Archive import handler
+window.archImportFiles=async(fileList)=>{
+  const files=Array.from(fileList);if(files.length===0)return;
+  const status=$('#archImportStatus');
+  const results=$('#archImportResults');
+  if(status)status.innerHTML=`<div class="al al-i"><span class="spin" style="display:inline-block">⏳</span><span>Analyse de ${files.length} document(s) en cours...</span></div>`;
+
+  // Load pdf.js if needed
+  if(!window.pdfjsLib){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    document.head.appendChild(s);
+    await new Promise((ok,ko)=>{s.onload=ok;s.onerror=ko;setTimeout(ko,15000);});
+    pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+
+  const extracted=[];
+  for(const file of files){
+    try{
+      let text='';
+      if(file.type==='application/pdf'){
+        const buf=await file.arrayBuffer();
+        const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+        for(let i=1;i<=pdf.numPages;i++){
+          const page=await pdf.getPage(i);
+          const tc=await page.getTextContent();
+          const rows={};
+          tc.items.forEach(it=>{
+            if(!it.str||!it.str.trim())return;
+            const y=Math.round(it.transform[5]);
+            if(!rows[y])rows[y]=[];
+            rows[y].push({x:it.transform[4],str:it.str});
+          });
+          Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+            text+=rows[y].sort((a,b)=>a.x-b.x).map(it=>it.str).join(' ')+'\n';
+          });
+        }
+      } else {
+        // Image — try OCR with Tesseract
+        if(!window.Tesseract){
+          const s=document.createElement('script');
+          s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+          document.head.appendChild(s);
+          await new Promise((ok,ko)=>{s.onload=ok;s.onerror=ko;setTimeout(ko,20000);});
+        }
+        const worker=await Tesseract.createWorker('fra');
+        const{data}=await worker.recognize(file);
+        await worker.terminate();
+        text=data.text||'';
+      }
+
+      // Extract year
+      let year=null;
+      const yearMatch=text.match(/exercice[:\s]*(\d{4})/i)||text.match(/annee[:\s]*(\d{4})/i)||text.match(/clos(?:e|ure)?[:\s]*(?:le\s*)?(?:\d{1,2}[\s\/.-]\d{1,2}[\s\/.-])(\d{4})/i)||text.match(/31[\s\/.-]12[\s\/.-](\d{4})/)||text.match(/(?:bilan|resultat|liasse)[\s\S]{0,40}(\d{4})/i);
+      if(yearMatch)year=parseInt(yearMatch[1]);
+      if(!year){const ym=text.match(/\b(20[12]\d)\b/g);if(ym&&ym.length>0){const counts={};ym.forEach(y=>{counts[y]=(counts[y]||0)+1;});year=parseInt(Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0]);}}
+
+      // Extract CA
+      let ca=null;
+      const caMatch=text.match(/chiffre\s*d['']?\s*affaires[:\s]*([\d\s,.]+)/i)||text.match(/total\s*produits?\s*d['']?exploitation[:\s]*([\d\s,.]+)/i)||text.match(/CA\s*(?:HT|net)?[:\s]*([\d\s,.]+)/i)||text.match(/(?:FL|FJ|FC)\s+([\d\s,.]+)/);
+      if(caMatch)ca=parseFloat(caMatch[1].replace(/\s/g,'').replace(',','.'));
+
+      // Extract result
+      let resultat=null;
+      const resMatch=text.match(/(?:resultat|bénéfice|benefice)\s*(?:net|de l['']exercice)?[:\s]*([-\d\s,.]+)/i)||text.match(/(?:HN|DI)\s+([-\d\s,.]+)/);
+      if(resMatch)resultat=parseFloat(resMatch[1].replace(/\s/g,'').replace(',','.'));
+
+      // Extract depenses
+      let depenses=null;
+      const depMatch=text.match(/total\s*charges?\s*(?:d['']?exploitation)?[:\s]*([\d\s,.]+)/i)||text.match(/(?:GF|GG)\s+([\d\s,.]+)/);
+      if(depMatch)depenses=parseFloat(depMatch[1].replace(/\s/g,'').replace(',','.'));
+
+      // Extract IS
+      let is=null;
+      const isMatch=text.match(/imp[oô]t\s*(?:sur\s*(?:les\s*)?)?(?:soci[eé]t[eé]s|b[eé]n[eé]fices?)[:\s]*([\d\s,.]+)/i)||text.match(/(?:HK|IS)\s+([\d\s,.]+)/);
+      if(isMatch)is=parseFloat(isMatch[1].replace(/\s/g,'').replace(',','.'));
+
+      // Extract TVA
+      let tvaC=null,tvaD=null;
+      const tvaCMatch=text.match(/TVA\s*collect[eé]e[:\s]*([\d\s,.]+)/i);
+      if(tvaCMatch)tvaC=parseFloat(tvaCMatch[1].replace(/\s/g,'').replace(',','.'));
+      const tvaDMatch=text.match(/TVA\s*d[eé]ductible[:\s]*([\d\s,.]+)/i);
+      if(tvaDMatch)tvaD=parseFloat(tvaDMatch[1].replace(/\s/g,'').replace(',','.'));
+
+      // Detect document type
+      let docType='Document';
+      if(/bilan/i.test(text))docType='Bilan';
+      else if(/liasse\s*fiscale|cerfa\s*20[35]/i.test(text))docType='Liasse fiscale';
+      else if(/d[eé]claration\s*(?:de\s*)?(?:r[eé]sultat|TVA|IS)/i.test(text))docType='Declaration';
+      else if(/compte\s*de\s*r[eé]sultat/i.test(text))docType='Compte de resultat';
+
+      extracted.push({file:file.name,year,ca,depenses,resultat,is,tvaC,tvaD,docType,text:text.substring(0,500)});
+    }catch(e){
+      extracted.push({file:file.name,error:e.message});
+    }
+  }
+
+  if(status)status.innerHTML='';
+  if(results){
+    results.innerHTML=extracted.map((ex,idx)=>{
+      if(ex.error)return`<div class="al al-w" style="margin-bottom:8px"><span>❌</span><span>${ex.file} — Erreur: ${ex.error}</span></div>`;
+      const hasData=ex.year||ex.ca||ex.resultat;
+      return`
+      <div class="cd" style="margin-bottom:10px;border-left:3px solid ${hasData?'var(--grn)':'var(--org)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div>
+            <div style="font-size:13px;font-weight:700">📄 ${ex.file}</div>
+            <div style="font-size:11px;color:var(--tx3)">${ex.docType} ${ex.year?'— Exercice '+ex.year:''}</div>
+          </div>
+          <span class="tg ${hasData?'t-grn':'t-org'}">${hasData?'Donnees detectees':'Verification requise'}</span>
+        </div>
+        <div class="gr g2" style="gap:8px;margin-bottom:10px">
+          <div class="fg"><label>Annee</label><input class="inp" type="number" id="archImp_y_${idx}" value="${ex.year||''}" placeholder="Ex: 2023"></div>
+          <div class="fg"><label>CA HT</label><input class="inp" type="number" id="archImp_ca_${idx}" value="${ex.ca||''}" placeholder="0"></div>
+          <div class="fg"><label>Depenses</label><input class="inp" type="number" id="archImp_dep_${idx}" value="${ex.depenses||''}" placeholder="0"></div>
+          <div class="fg"><label>Resultat</label><input class="inp" type="number" id="archImp_res_${idx}" value="${ex.resultat||''}" placeholder="0"></div>
+          <div class="fg"><label>IS paye</label><input class="inp" type="number" id="archImp_is_${idx}" value="${ex.is||''}" placeholder="0"></div>
+          <div class="fg"><label>TVA collectee</label><input class="inp" type="number" id="archImp_tvac_${idx}" value="${ex.tvaC||''}" placeholder="0"></div>
+        </div>
+        <button class="bt bt-p sm" onclick="window.archSaveImported(${idx})">✅ Valider et enregistrer</button>
+        <button class="bt bt-s sm" style="margin-left:6px" onclick="window.archPreviewText(${idx})" title="Voir le texte extrait">🔍 Texte brut</button>
+      </div>`;
+    }).join('');
+    window._archExtracted=extracted;
+  }
+};
+
+window.archSaveImported=(idx)=>{
+  const year=parseInt(document.getElementById('archImp_y_'+idx)?.value);
+  if(!year||year<2000||year>2099){alert('Annee invalide');return;}
+  const data={
+    ca:parseFloat(document.getElementById('archImp_ca_'+idx)?.value)||0,
+    depenses:parseFloat(document.getElementById('archImp_dep_'+idx)?.value)||0,
+    resultat:parseFloat(document.getElementById('archImp_res_'+idx)?.value)||0,
+    is:parseFloat(document.getElementById('archImp_is_'+idx)?.value)||0,
+    tvaCollectee:parseFloat(document.getElementById('archImp_tvac_'+idx)?.value)||0,
+    tvaDeductible:0,
+    source:'import',
+    sourceFile:(window._archExtracted&&window._archExtracted[idx])?window._archExtracted[idx].file:'',
+    date:new Date().toISOString()
+  };
+  save('historique_'+year,data);
+  alert('Exercice '+year+' enregistre !');
+};
+
+window.archPreviewText=(idx)=>{
+  if(!window._archExtracted||!window._archExtracted[idx])return;
+  const ex=window._archExtracted[idx];
+  openDocWindow('Texte extrait — '+ex.file,'<pre style="white-space:pre-wrap;font-size:12px;line-height:1.6;font-family:monospace">'+ex.text+'</pre>');
+};
+
+window.archSaveManual=()=>{
+  const year=parseInt(document.getElementById('archYear')?.value);
+  if(!year){alert('Selectionnez une annee');return;}
+  const data={
+    ca:parseFloat(document.getElementById('archCA')?.value)||0,
+    depenses:parseFloat(document.getElementById('archDep')?.value)||0,
+    resultat:parseFloat(document.getElementById('archRes')?.value)||0,
+    is:parseFloat(document.getElementById('archIS')?.value)||0,
+    tvaCollectee:parseFloat(document.getElementById('archTVAC')?.value)||0,
+    tvaDeductible:parseFloat(document.getElementById('archTVAD')?.value)||0,
+    source:'manual',
+    date:new Date().toISOString()
+  };
+  save('historique_'+year,data);
+  window._archEditYear=null;
+  window._archTab='history';
+  goTo('archives');
+};
+
+window.archEdit=(year)=>{
+  window._archEditYear=year;
+  window._archTab='manual';
+  window._archFormYear=year;
+  goTo('archives');
+};
+
+window.archDelete=(year)=>{
+  if(!confirm('Supprimer les donnees de l\'exercice '+year+' ?'))return;
+  localStorage.removeItem('fp_historique_'+year);
+  goTo('archives');
+};
 
 // Re-render with new nav
 render();

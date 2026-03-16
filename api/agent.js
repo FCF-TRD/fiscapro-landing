@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { kv } from '@vercel/kv';
 
 const client = new Anthropic(); // Uses ANTHROPIC_API_KEY env var automatically
 
@@ -45,7 +46,9 @@ REGLES :
 - Utilise des emojis pour structurer
 - Reponds en francais
 
-⚠️ Tu n'es PAS inscrit a l'Ordre des experts-comptables. Conseils informatifs uniquement.`;
+⚠️ Tu n'es PAS inscrit a l'Ordre des experts-comptables. Conseils informatifs uniquement.
+
+Tu as une memoire persistante. Utilise l'outil 'memoriser' pour sauvegarder les infos importantes sur l'entreprise (decisions, preferences, contexte). Utilise 'rappeler' pour les retrouver. Commence chaque conversation en rappelant ce que tu sais avec rappeler({cle:'tout'}).`;
 
 // Tools the agent can use
 const tools = [
@@ -113,6 +116,17 @@ const tools = [
       },
       required: ["cle", "valeur"]
     }
+  },
+  {
+    name: "rappeler",
+    description: "Recupere les informations memorisees precedemment sur cette entreprise",
+    input_schema: {
+      type: "object",
+      properties: {
+        cle: { type: "string", description: "Categorie a rappeler (ou 'tout' pour tout voir)" }
+      },
+      required: ["cle"]
+    }
   }
 ];
 
@@ -176,20 +190,47 @@ function genererDocument({ type_document, donnees = {} }) {
   return JSON.stringify({ document: templates[type_document] || 'Type de document non supporte. Types disponibles: pv_ag, lettre_relance, attestation', type: type_document });
 }
 
-// Memory store (in-memory for now, could use Vercel KV later)
+// Memory store (Vercel KV with in-memory fallback)
 const memoryStore = {};
-function memoriser({ cle, valeur }) {
-  memoryStore[cle] = valeur;
-  return JSON.stringify({ status: 'ok', message: `Memorise: ${cle} = ${valeur}` });
+
+async function memoriser({ cle, valeur }) {
+  try {
+    const key = 'fp_memory_' + cle;
+    await kv.set(key, valeur);
+    // Also maintain an index of all keys
+    const index = await kv.get('fp_memory_index') || [];
+    if (!index.includes(cle)) { index.push(cle); await kv.set('fp_memory_index', index); }
+    return JSON.stringify({ status: 'ok', message: 'Memorise: ' + cle + ' = ' + valeur });
+  } catch(e) {
+    // Fallback to in-memory if KV not configured
+    memoryStore[cle] = valeur;
+    return JSON.stringify({ status: 'ok', message: 'Memorise (local): ' + cle + ' = ' + valeur });
+  }
 }
 
-function executeTool(name, input) {
+async function rappeler({ cle }) {
+  try {
+    if (cle === 'tout') {
+      const index = await kv.get('fp_memory_index') || [];
+      const all = {};
+      for (const k of index) { all[k] = await kv.get('fp_memory_' + k); }
+      return JSON.stringify(all);
+    }
+    const val = await kv.get('fp_memory_' + cle);
+    return JSON.stringify({ [cle]: val || 'Rien memorise pour cette cle' });
+  } catch(e) {
+    return JSON.stringify(memoryStore[cle] ? { [cle]: memoryStore[cle] } : { error: 'KV non configure' });
+  }
+}
+
+async function executeTool(name, input) {
   switch (name) {
     case 'simuler_salaire_dividendes': return simulerSalaireDividendes(input);
     case 'calculer_is': return calculerIS(input);
     case 'calculer_economies': return calculerEconomies(input);
     case 'generer_document': return genererDocument(input);
-    case 'memoriser': return memoriser(input);
+    case 'memoriser': return await memoriser(input);
+    case 'rappeler': return await rappeler(input);
     default: return JSON.stringify({ error: 'Tool inconnue: ' + name });
   }
 }
@@ -239,7 +280,7 @@ export default async function handler(req, res) {
         const toolResults = [];
         for (const block of response.content) {
           if (block.type === 'tool_use') {
-            const result = executeTool(block.name, block.input);
+            const result = await executeTool(block.name, block.input);
             toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
           }
         }
