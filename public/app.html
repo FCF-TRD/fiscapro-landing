@@ -2833,12 +2833,28 @@ function renderFrais(el){
     <div class="cd kpi"><div class="kpi-v" style="color:var(--pur)">${fmt(totalAutre)}</div><div class="kpi-l">Autres</div></div>
   </div>
 
-  <!-- ACTIONS -->
+  <!-- SCAN PHOTOS -->
+  <div class="cd" style="margin-bottom:16px">
+    <div class="dz" id="fraisDZ" style="padding:24px 16px"
+      onclick="document.getElementById('fraisPhotos').click()"
+      ondragover="event.preventDefault();this.style.borderColor='var(--acc)';this.style.background='rgba(10,104,71,.04)'"
+      ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';scanFraisPhotos(event.dataTransfer.files)"
+      ondragleave="this.style.borderColor='';this.style.background=''">
+      <input type="file" id="fraisPhotos" accept="image/*,.pdf,.heic,.heif" multiple capture="environment" style="display:none" onchange="scanFraisPhotos(this.files)">
+      <div style="font-size:36px;margin-bottom:6px">📸</div>
+      <div style="font-size:14px;font-weight:700">Scan tes tickets et factures</div>
+      <div style="font-size:12px;color:var(--tx3);margin-top:4px">Photo, PDF, HEIC — plusieurs fichiers a la fois. L'OCR detecte le montant et la date.</div>
+    </div>
+    <div id="fraisScanQueue" style="margin-top:8px"></div>
+    <div id="fraisScanResults" style="margin-top:8px"></div>
+  </div>
+
+  <!-- ACTIONS MANUELLES -->
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="bt bt-p" onclick="openNewFrais('ik')">🚗 Indemnite kilometrique</button>
-    <button class="bt bt-s" onclick="openNewFrais('repas')">🍽️ Frais de repas</button>
-    <button class="bt bt-s" onclick="openNewFrais('deplacement')">🚄 Deplacement</button>
-    <button class="bt bt-s" onclick="openNewFrais('autre')">📎 Autre frais</button>
+    <button class="bt bt-p sm" onclick="openNewFrais('ik')">🚗 IK</button>
+    <button class="bt bt-s sm" onclick="openNewFrais('repas')">🍽️ Repas</button>
+    <button class="bt bt-s sm" onclick="openNewFrais('deplacement')">🚄 Deplacement</button>
+    <button class="bt bt-s sm" onclick="openNewFrais('autre')">📎 Autre</button>
   </div>
 
   <!-- SIMULATEUR IK -->
@@ -2877,6 +2893,146 @@ function renderFrais(el){
 
   <div class="al al-i" style="margin-top:12px"><span>💡</span><span><b>Astuce :</b> Les frais de repas sont deductibles entre 5,35€ et 20,70€ par repas (2025). Les IK sont exonerees de charges et d'IR. Conserve tous tes justificatifs.</span></div>`;
 }
+
+window.scanFraisPhotos=async(fileList)=>{
+  const files=Array.from(fileList);if(files.length===0)return;
+  const queue=$('#fraisScanQueue');const results=$('#fraisScanResults');
+
+  // Show queue
+  if(queue)queue.innerHTML=files.map((f,i)=>`
+    <div id="fsq_${i}" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--bg3);border-radius:6px;margin-bottom:4px">
+      <span style="font-size:14px">${f.type.includes('pdf')?'📄':'📸'}</span>
+      <span style="flex:1;font-size:12px;font-weight:600">${f.name}</span>
+      <span id="fsqs_${i}" class="tg" style="background:var(--bg4);color:var(--tx3)">En attente</span>
+    </div>`).join('');
+
+  // Load Tesseract if needed
+  if(!window.Tesseract){
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+    document.head.appendChild(s);
+    await new Promise((ok,ko)=>{s.onload=ok;s.onerror=ko;setTimeout(ko,20000);});
+  }
+
+  const scanned=[];
+
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    const fqs=$('#fsqs_'+i);
+    if(fqs){fqs.className='tg t-org';fqs.textContent='Scan...';}
+
+    try{
+      let imgSrc=f;
+      // If PDF, skip OCR for now (use text extraction)
+      if(f.type==='application/pdf'){
+        if(fqs){fqs.className='tg t-org';fqs.textContent='PDF...';}
+        // Simple: use pdf.js to extract text
+        if(!window.pdfjsLib){
+          const s2=document.createElement('script');s2.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          document.head.appendChild(s2);await new Promise((ok,ko)=>{s2.onload=ok;s2.onerror=ko;setTimeout(ko,15000);});
+          pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+        const buf=await f.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+        let text='';
+        for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p);const tc=await page.getTextContent();text+=tc.items.map(it=>it.str).join(' ')+'\n';}
+        const parsed=parseFraisText(text,f.name);
+        if(parsed)scanned.push(parsed);
+        if(fqs){fqs.className='tg t-grn';fqs.textContent=parsed?fmt2(parsed.montant):'Rien detecte';}
+        continue;
+      }
+
+      // OCR image
+      const worker=await Tesseract.createWorker('fra');
+      const{data}=await worker.recognize(f);
+      await worker.terminate();
+      const text=data.text||'';
+
+      const parsed=parseFraisText(text,f.name);
+      if(parsed)scanned.push(parsed);
+      if(fqs){fqs.className='tg t-grn';fqs.textContent=parsed?fmt2(parsed.montant):'Rien detecte';}
+    }catch(e){
+      console.error('Scan error',f.name,e);
+      if(fqs){fqs.className='tg t-red';fqs.textContent='Erreur';}
+    }
+  }
+
+  // Show results for validation
+  if(results&&scanned.length>0){
+    results.innerHTML=`
+    <div class="al al-s"><span>✅</span><span><b>${scanned.length} ticket${scanned.length>1?'s':''} detecte${scanned.length>1?'s':''}</b> — verifie et valide :</span></div>
+    ${scanned.map((s,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg2);border:1px solid var(--brd);border-radius:8px;margin-bottom:6px">
+      <select class="inp" style="width:auto;padding:4px 24px 4px 8px;font-size:11px" id="frScanType_${i}">
+        <option value="repas" ${s.type==='repas'?'selected':''}>🍽️ Repas</option>
+        <option value="deplacement" ${s.type==='deplacement'?'selected':''}>🚄 Deplacement</option>
+        <option value="autre" ${s.type==='autre'?'selected':''}>📎 Autre</option>
+      </select>
+      <input class="inp" style="flex:1;padding:4px 8px;font-size:12px" id="frScanDesc_${i}" value="${s.desc}">
+      <input class="inp" type="date" style="width:auto;padding:4px 8px;font-size:11px" id="frScanDate_${i}" value="${s.date}">
+      <input class="inp" type="number" step="0.01" style="width:80px;padding:4px 8px;font-size:12px;font-weight:700;text-align:right" id="frScanMontant_${i}" value="${s.montant.toFixed(2)}">
+    </div>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="bt bt-p" onclick="validateScannedFrais(${scanned.length})">✅ Valider ${scanned.length} note${scanned.length>1?'s':''}</button>
+      <button class="bt bt-s" onclick="document.getElementById('fraisScanResults').innerHTML='';document.getElementById('fraisScanQueue').innerHTML=''">Annuler</button>
+    </div>`;
+  }else if(results){
+    results.innerHTML=`<div class="al al-w"><span>⚠️</span><span>Aucun montant detecte. Essaie avec une photo plus nette ou saisis manuellement.</span></div>`;
+  }
+};
+
+function parseFraisText(text,filename){
+  if(!text||text.trim().length<5)return null;
+
+  // Detect amount
+  let montant=0;
+  const amtPatterns=[/TOTAL\s*(?:TTC|€|EUR)?\s*:?\s*(\d+[.,]\d{2})/i,/MONTANT\s*(?:TTC|€|EUR)?\s*:?\s*(\d+[.,]\d{2})/i,/A\s*PAYER\s*:?\s*(\d+[.,]\d{2})/i,/NET\s*A\s*PAYER\s*:?\s*(\d+[.,]\d{2})/i,/CB\s*\*+\s*(\d+[.,]\d{2})/i,/(\d+[.,]\d{2})\s*€/];
+  for(const p of amtPatterns){const m=text.match(p);if(m){montant=parseFloat(m[1].replace(',','.'));if(montant>0)break;}}
+  if(!montant){const nums=[...text.matchAll(/(\d+[.,]\d{2})/g)].map(m=>parseFloat(m[1].replace(',','.')));if(nums.length>0)montant=Math.max(...nums);}
+
+  // Detect date
+  let date=today();
+  const dateM=text.match(/(\d{2})[\/.\-](\d{2})[\/.\-](\d{2,4})/);
+  if(dateM){let y=dateM[3];if(y.length===2)y='20'+y;date=y+'-'+dateM[2].padStart(2,'0')+'-'+dateM[1].padStart(2,'0');}
+
+  // Detect vendor/description
+  const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>2);
+  let desc=lines[0]||filename||'Ticket';
+  desc=desc.replace(/^\d+\s*/,'').replace(/[*#=_-]{3,}/g,'').trim();
+  if(desc.length>40)desc=desc.substring(0,40);
+
+  // Auto-categorize
+  const lc=(text+' '+desc).toLowerCase();
+  let type='autre';
+  if(/restaurant|repas|dejeuner|diner|brasserie|cafe|bistro|pizza|burger|sushi|traiteur/i.test(lc))type='repas';
+  else if(/sncf|train|billet|avion|hotel|parking|peage|taxi|uber|bolt|essence|carburant|total|esso/i.test(lc))type='deplacement';
+
+  if(montant<=0)return null;
+  return{montant,date,desc,type};
+}
+
+window.validateScannedFrais=(count)=>{
+  const frais=load('notesFrais',[]);
+  for(let i=0;i<count;i++){
+    const type=$('#frScanType_'+i)?.value||'autre';
+    const desc=$('#frScanDesc_'+i)?.value||'Ticket';
+    const date=$('#frScanDate_'+i)?.value||today();
+    let montant=parseFloat($('#frScanMontant_'+i)?.value||0);
+    if(montant<=0)continue;
+
+    // For repas, calculate deductible part
+    let montantFinal=montant;
+    let detail='';
+    if(type==='repas'){
+      montantFinal=Math.min(Math.max(montant-5.35,0),20.70-5.35);
+      detail='Paye: '+fmt2(montant)+', deductible: '+fmt2(montantFinal);
+    }
+
+    frais.push({id:uid(),date,type,montant:Math.round(montantFinal*100)/100,desc,detail});
+    depenses.push({id:uid(),date,desc,ht:Math.round(montantFinal*100)/100,tva:0,cat:type==='repas'?'Repas/Réception':'Transport/Déplacement',src:'frais'});
+  }
+  save('notesFrais',frais);persist();
+  renderPage();
+};
 
 window.updateIKSimul=()=>{
   const cv=+($('#ikCV')?.value||5);const km=+($('#ikKM')?.value||0);
