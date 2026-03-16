@@ -1061,81 +1061,117 @@ function getAides(ape,type,company,c){
     aides.push(mk('FNE-Formation','Jusqu\'a 70% pris en charge','OF pendant activite partielle',
       'Aide de l\'Etat pour financer la formation des salaries en activite partielle ou en difficulte. Demande via la DREETS.',
       '',['Formation','Crise']));
-    aides.push(mk('Plan de developpement des competences','Budget employeur','Toutes entreprises clientes',
-      'Les entreprises de tes clients doivent former leurs salaries. Budget PDC obligatoire. Demande aux DRH de tes clients prospects.',
-      '',['Formation','Commercial']));
+    aides.push(mk('Exoneration TVA art. 261-4-4°','Pas de TVA a facturer','OF avec attestation DREETS',
+      'En tant qu\'organisme de formation, tu peux etre exoneree de TVA. Pas de CA3/CA12. Tes clients particuliers payent moins cher. Demande l\'attestation aupres de la DREETS.',
+      '',['Formation','TVA']));
   }
 
   // IT / Numerique (58xx, 62xx, 63xx)
   if(/^58|^62|^63/.test(a)){
     aides.push(mk('CIR — Credit Impot Recherche','30% des depenses R&D','Toute entreprise qui innove',
-      'L\'Etat rembourse 30% de tes depenses de R&D : salaires devs (x200% forfait), materiel, sous-traitance agreee. Un dev a 45K = 13 500€ de credit.',
+      'L\'Etat rembourse 30% de tes depenses de R&D : salaires devs (x200% forfait), materiel, sous-traitance agreee. Un dev a 45K€ = 13 500€ de credit.',
       '',['R&D','30%']));
     aides.push(mk('CII — Credit Impot Innovation','20% (max 80 000 €/an)','PME < 250 salaries',
       'Conception de prototypes, produits nouveaux. 20% des depenses plafonnees a 400K€. Cumulable avec le CIR.',
       '',['Innovation','PME']));
-    aides.push(mk('JEI — Jeune Entreprise Innovante','Exoneration charges sociales','Entreprise < 8 ans, 20%+ R&D',
+    aides.push(mk('JEI — Jeune Entreprise Innovante','Exoneration charges','Entreprise < 8 ans, 20%+ R&D',
       `${nom} a ${age.toFixed(0)} an${age>=2?'s':''}. ${age<8?'Eligible !':'Trop ancienne.'}. Exoneration des charges patronales sur les salaires R&D pendant 7 ans.`,
-      '',['R&D','Charges',age<8?'Eligible':'Expire']));
+      '',['R&D','Charges']));
     aides.push(mk('Bourse French Tech','Jusqu\'a 90 000 €','Startup innovante',
-      'Subvention BPI pour les startups en phase d\'amorcage. Pas de remboursement. Dossier de candidature aupres de BPI France.',
-      'https://www.bpifrance.fr/nos-solutions/toutes-nos-solutions/bourse-french-tech',['Startup','Subvention']));
-    aides.push(mk('Pass French Tech','Accompagnement premium','Hypercroissance',
-      'Accompagnement BPI pour les entreprises en hypercroissance (>30%/an). Acces privilegia aux aides, mentoring, mise en relation.',
-      '',['Startup','Croissance']));
-    aides.push(mk('Aide au recrutement tech — APEC','Accompagnement gratuit','Recrutement cadres tech',
-      'L\'APEC aide gratuitement les PME a recruter des cadres techniques. Diffusion offre, pre-selection, conseil.',
-      'https://www.apec.fr',['Recrutement','Tech']));
+      'Subvention BPI sans remboursement pour les startups en phase d\'amorcage.',
+      'https://www.bpifrance.fr',['Startup','Subvention']));
+    aides.push(mk('IP Box — Revenus logiciels a 10%','Taux IS 10% au lieu de 25%','Editeur logiciel / SaaS',
+      'Les revenus de tes logiciels (licences, SaaS, cessions) sont taxes a 10%. 100K€ de SaaS = 10K€ IS au lieu de 25K€. Art. 238 CGI.',
+      '',['Dev','IP Box']));
   }
 
   // Commerce (45xx-47xx)
   if(/^4[567]/.test(a)){
-    aides.push(mk('FISAC — Fonds commerce de proximite','Subvention variable','Commerce de proximite',
-      'Aide pour l\'amenagement, la modernisation ou la securisation de ton commerce. Dossier en mairie ou communaute de communes.',
-      '',['Commerce','Modernisation']));
-    aides.push(mk('Aide a la numerisation commerce','Jusqu\'a 5 000 €','Petit commerce',
-      'Site e-commerce, click & collect, caisse connectee. Subvention regionale + France Num.',
-      '',['Commerce','Numerique']));
-    aides.push(mk('Exoneration ZFU/QPV','Exoneration IS 5 ans','Commerce en zone prioritaire',
-      'Si ton commerce est en Zone Franche Urbaine ou Quartier Prioritaire : exoneration IS, CFE et charges sociales pendant 5 ans.',
+    aides.push(mk('QPV — Quartier Prioritaire','Exoneration IS 5 ans degressif','Commerce en QPV, < 50 sal.',
+      'Nouveau regime 2026 : exoneration degressive sur 59 mois pour les entreprises < 50 salaries, < 10M€ CA, creees 2026-2030 en QPV. Inclut CFE et TFPB.',
       '',['Commerce','Zone']));
+    aides.push(mk('ZFRR — Zone France Ruralites Revitalisation','Exoneration IS creation/reprise','Commerce en zone rurale',
+      'Exoneration IS/IR pour creation ou reprise 2024-2029 en zone rurale. Max 25% du CA hors zone. Remplace les anciennes ZRR.',
+      '',['Commerce','Rural']));
+    aides.push(mk('Action Coeur de Ville','Subvention renovation commerce','Commerce centre-ville',
+      'Programme de revitalisation des centres-villes. Subventions pour amenagement, renovation de facades, modernisation. Remplace le FISAC (supprime 2019). Dossier en mairie.',
+      '',['Commerce','Modernisation']));
+    aides.push(mk('TVA 5,5% alimentaire','Taux reduit sur produits alimentaires','Commerce alimentaire',
+      'Produits alimentaires a consommation differee = TVA 5,5%. Produits de premiere necessite. Confiserie et alcool restent a 20%.',
+      '',['Commerce','TVA']));
+    aides.push(mk('OSS — Guichet unique TVA UE','Simplification TVA e-commerce','E-commerce > 10 000€ UE',
+      'Si tu vends en ligne a des particuliers dans l\'UE au-dela de 10 000€/an : regime OSS pour declarer toute la TVA UE en France. Seuil OSS+ a 15 000€ en 2026.',
+      '',['E-commerce','TVA UE']));
   }
 
   // BTP (41xx-43xx)
   if(/^4[123]/.test(a)){
-    aides.push(mk('Aide Pro-BTP','Aides sociales + formation','Entreprise BTP',
-      'Pro-BTP offre des aides specifiques : mutuelle avantageuse, formation securite, aides au logement pour les compagnons.',
+    aides.push(mk('Label RGE — Acces marches renovation','Acces MaPrimeRenov + CEE','Artisan tous corps',
+      'Sans RGE, tes clients ne peuvent pas beneficier de MaPrimeRenov, CEE ni Eco-PTZ. Validite 4 ans, audit annuel. Organismes : Qualibat, Qualifelec, Qualit\'EnR. Nouvelle formation RENOPERF obligatoire depuis oct. 2025.',
+      'https://www.ffbatiment.fr',['BTP','Label','RGE']));
+    aides.push(mk('MaPrimeRenov 2026','300 a 11 000€ par geste','Particulier (ton client paye moins)',
+      'Aide directe au particulier : PAC geothermique 11 000€, PAC air/eau 5 000€, isolation toiture 75€/m², fenetres 100€/unite. Attention 2026 : murs et biomasse exclus du parcours par geste. Plafond 20 000€/5 ans.',
+      'https://france-renov.gouv.fr',['BTP','Energie','MaPrimeRenov']));
+    aides.push(mk('CEE — Certificats Economies Energie','Primes variables par geste','Particulier + entreprise',
+      'Coup de pouce prolonge jusqu\'au 31/12/2026 pour PAC, chaudieres granules, solaire. Le client recoit une prime, toi tu es paye normalement.',
+      'https://france-renov.gouv.fr/aides/cee',['BTP','Energie','CEE']));
+    aides.push(mk('Eco-PTZ','7 000 a 50 000€ a taux 0%','Client particulier',
+      'Pret a taux zero pour tes clients : 7 000€ (1 geste) a 50 000€ (renovation ampleur). Remboursement 15-20 ans. Argument commercial enorme.',
+      'https://france-renov.gouv.fr/aides/eco-pret-taux-zero',['BTP','Financement']));
+    aides.push(mk('TVA 5,5% renovation energetique','Isolation, PAC, VMC, solaire','Logement > 2 ans',
+      'TVA 5,5% sur : isolation, PAC air/eau et geo, biomasse, solaire, VMC, thermostats. Attestation simplifiee depuis mars 2025 (mention sur facture suffit).',
+      '',['BTP','TVA','5,5%']));
+    aides.push(mk('TVA 10% travaux renovation','Peinture, plomberie, electricite','Logement > 2 ans',
+      'TVA 10% sur tous travaux de renovation standard (hors energetique). Peinture, plomberie, electricite, menuiserie, carrelage.',
+      '',['BTP','TVA','10%']));
+    aides.push(mk('Auto-liquidation TVA sous-traitance','Pas de TVA a facturer au donneur d\'ordre','Sous-traitant BTP',
+      'Art. 283-2 nonies CGI : le sous-traitant facture HT, le donneur d\'ordre auto-liquide la TVA. Tu ne collectes pas de TVA mais tu recuperes la tienne.',
+      '',['BTP','TVA','Sous-traitance']));
+    aides.push(mk('Suramortissement engins propres','Jusqu\'a 60% en plus (PME)','Engins non-routiers',
+      'Suramortissement 40% (ou 60% PME) pour les engins de chantier moins polluants (electrique, GNV). Valable jusqu\'au 31/12/2026.',
+      '',['BTP','Investissement']));
+    aides.push(mk('OPCO Constructys — Formation BTP','Jusqu\'a 1 500€/stagiaire','Entreprise < 50 salaries',
+      'Constructys finance la formation de tes salaries : plan de formation, qualifications, habilitations. Cotisation 0,55% (< 11 sal.) ou 1% (11+) + 0,30% conventionnel.',
+      'https://www.constructys.fr',['BTP','Formation','OPCO']));
+    aides.push(mk('DFS — Deduction Forfaitaire Specifique','7% en 2026 (degressif)','Conducteurs d\'engins, ouvriers',
+      'Deduction forfaitaire de 7% sur l\'assiette des cotisations sociales pour frais professionnels. Phase-out progressif : 0% en 2032.',
       '',['BTP','Social']));
-    aides.push(mk('Eco-pret a taux zero (Eco-PTZ)','Jusqu\'a 50 000 €','Travaux renovation energetique',
-      'Tes clients peuvent beneficier d\'un Eco-PTZ pour financer tes travaux. Argument commercial puissant.',
-      '',['BTP','Renovation']));
-    aides.push(mk('MaPrimeRenov\'','Jusqu\'a 20 000 € pour ton client','Travaux energie',
-      'Aide directe au particulier pour la renovation. Tu es paye directement, le client recoit l\'aide apres. Etre RGE = obligatoire.',
-      '',['BTP','Energie']));
-    aides.push(mk('Label RGE','Acces aux marches aides','Artisan BTP',
-      'Sans le label RGE (Reconnu Garant Environnement), tes clients ne peuvent pas beneficier des aides (MaPrimeRenov, CEE). Le RGE ouvre le marche.',
-      '',['BTP','Label']));
   }
 
   // Restauration / Hebergement (55xx, 56xx)
   if(/^5[56]/.test(a)){
-    aides.push(mk('TVA reduite 10% restauration','Economie sur la TVA','Restauration sur place',
-      'La restauration sur place beneficie du taux de TVA reduit a 10% (au lieu de 20%). La vente a emporter de plats prepares aussi.',
+    aides.push(mk('TVA 10% sur place','Nourriture + boissons non-alcoolisees','Restauration sur place',
+      'TVA 10% sur les repas consommes sur place (nourriture + soft drinks). Eau = 5,5%. Alcool = toujours 20%. Ventiler sur la facture.',
       '',['Restauration','TVA']));
-    aides.push(mk('Aide UMIH / GNI','Aides sectorielles','Adherent syndicat',
-      'Les syndicats de l\'hotellerie-restauration (UMIH, GNI) offrent des aides juridiques, des negociations collectives, et des outils de gestion gratuits.',
-      '',['Restauration','Syndicat']));
-    aides.push(mk('Exoneration avantage repas','~5€/repas au lieu du reel','Salaries restauration',
-      'Les repas pris par les salaries en restauration sont evalues forfaitairement (~5,20€) au lieu de la valeur reelle. Moins de charges.',
+    aides.push(mk('TVA 10% a emporter immediat','Sandwichs, burgers, pizzas','Consommation immediate',
+      'Les produits a consommation immediate (chauffes, non conservables) = TVA 10%. Les plats traiteur sous vide/en bac = 5,5%.',
+      '',['Restauration','TVA']));
+    aides.push(mk('Avantage repas forfaitaire','4,25€/repas au lieu du reel','Convention HCR (IDCC 1979)',
+      'En HCR, les repas pris par le personnel sont evalues a 4,25€ (via le minimum garanti) au lieu du prix reel. Un cuisinier qui mange un plat a 15€ n\'est charge que sur 4,25€.',
+      '',['Restauration','Social']));
+    aides.push(mk('Pourboires exoneres jusqu\'en 2028','0€ de charges sur les pourboires','Salaire < 1,6 SMIC',
+      'Les pourboires volontaires sont exoneres de charges sociales et d\'IR jusqu\'au 31/12/2028. Condition : salaire brut < 2 917€/mois (1,6 SMIC).',
+      '',['Restauration','Social']));
+    aides.push(mk('Don alimentaire — 60% de reduction IS','Reduction d\'impot sur les invendus','Tout restaurant',
+      'Tu donnes tes invendus a une association (Restos du Coeur, etc.) ? Reduction IS de 60% de la valeur des denrees donnees. Bon pour la planete et pour tes impots.',
+      '',['Restauration','IS']));
+    aides.push(mk('Permis d\'exploitation','Obligatoire 20h','Ouverture resto/bar',
+      'Formation obligatoire de 20h pour ouvrir un debit de boissons ou restaurant servant de l\'alcool. Valable 10 ans, puis recyclage 6h.',
+      '',['Restauration','Obligation']));
+    aides.push(mk('HACCP — Formation hygiene','14h obligatoires','Au moins 1 personne dans l\'equipe',
+      'Au moins une personne dans l\'etablissement doit avoir suivi la formation HACCP (14h). Obligatoire pour tout etablissement manipulant des denrees.',
+      '',['Restauration','Obligation']));
+    aides.push(mk('Titre restaurant 2026','Part patronale 7,26€ max exoneree','Salaries restauration',
+      'Meme en restauration, tes salaries peuvent recevoir des titres restaurant. Part patronale exoneree a 50-60%, plafond 7,26€/titre en 2026.',
       '',['Restauration','Social']));
   }
 
   // Sante (86xx-88xx)
   if(/^8[678]/.test(a)){
-    aides.push(mk('Contrat d\'aide a l\'installation (CAIM)','Jusqu\'a 50 000 €','Medecins zone sous-dense',
+    aides.push(mk('CAIM — Aide installation medecins','Jusqu\'a 50 000 €','Zone sous-dense',
       'Aide a l\'installation dans les deserts medicaux. 50 000€ de prime + exonerations fiscales.',
       '',['Sante','Installation']));
-    aides.push(mk('Exoneration ZRR','Exoneration IR/IS 5 ans','Professionnel zone rurale',
+    aides.push(mk('Exoneration ZRR/ZFRR','Exoneration IR/IS 5 ans','Zone rurale',
       'Installation en Zone de Revitalisation Rurale = exoneration d\'impot sur les benefices pendant 5 ans (degressive ensuite).',
       '',['Sante','Rural']));
   }
@@ -1143,7 +1179,7 @@ function getAides(ape,type,company,c){
   // Agriculture (01xx-03xx)
   if(/^0[123]/.test(a)){
     aides.push(mk('PAC — Aides directes','Variable','Exploitant agricole',
-      'Aides directes de la PAC (Politique Agricole Commune) : DPB, aide verte, paiement redistributif. Demande via telepac.agriculture.gouv.fr.',
+      'Aides directes de la PAC : DPB, aide verte, paiement redistributif. Demande via telepac.agriculture.gouv.fr.',
       '',['Agriculture','EU']));
     aides.push(mk('DJA — Dotation Jeune Agriculteur','10 000 a 40 000 €','Agriculteur < 40 ans',
       'Aide a l\'installation pour les jeunes agriculteurs. Montant variable selon la zone et le projet.',
@@ -1152,31 +1188,55 @@ function getAides(ape,type,company,c){
 
   // Industrie (10xx-33xx)
   if(/^[12][0-9]|^3[0-3]/.test(a)){
-    aides.push(mk('Suramortissement industriel','40% en plus','PME industrielle',
-      'Quand tu achetes un robot, une machine-outil, un logiciel industriel : tu deduis 40% en plus de l\'amortissement normal. Un investissement de 100K€ = 140K€ de deduction.',
+    aides.push(mk('Suramortissement industriel','40-60% en plus','PME industrielle',
+      'Robot, machine-outil, logiciel industriel : tu deduis 40% (ou 60% PME) en plus de l\'amortissement. 100K€ d\'investissement = 160K€ de deduction.',
       '',['Industrie','Investissement']));
-    aides.push(mk('France 2030 — Industrie verte','Subventions variables','Projet industriel innovant',
-      'Plan d\'investissement France 2030 pour la reindustrialisation. Appels a projets reguliers : usines du futur, decarbonation, souverainete.',
+    aides.push(mk('France 2030','Subventions variables','Projet innovant',
+      'Plan d\'investissement pour la reindustrialisation. Appels a projets : usines du futur, decarbonation, souverainete.',
       'https://www.gouvernement.fr/france-2030',['Industrie','Innovation']));
-    aides.push(mk('ADEME — Aide transition ecologique','Subvention ou pret','Entreprise industrielle',
-      'L\'ADEME finance la transition ecologique : efficacite energetique, economie circulaire, mobilite durable. Diagnostic gratuit + aides a l\'investissement.',
+    aides.push(mk('ADEME — Transition ecologique','Subvention ou pret','Entreprise industrielle',
+      'L\'ADEME finance : efficacite energetique, economie circulaire, mobilite durable. Diagnostic gratuit + aides investissement.',
       'https://agirpourlatransition.ademe.fr/entreprises',['Industrie','Ecologie']));
   }
 
   // Transport (49xx-53xx)
-  if(/^[45][0-3]|^49/.test(a)){
-    aides.push(mk('Aide au verdissement flotte','Jusqu\'a 40 000 €/vehicule','Transporteur',
-      'Subvention pour l\'achat de vehicules propres (electrique, hydrogene, GNV). ADEME + bonus ecologique cumules.',
-      '',['Transport','Ecologie']));
+  if(/^49|^5[0-3]/.test(a)){
+    aides.push(mk('E-TRANS ADEME','Jusqu\'a 130M€ (programme)','Vehicule lourd electrique',
+      'Programme ADEME pour l\'acquisition de camions et bus electriques. Lots dedies : porteurs, tracteurs, autobus, autocars.',
+      'https://agirpourlatransition.ademe.fr',['Transport','Ecologie']));
+    aides.push(mk('Suramortissement vehicules propres','Jusqu\'a 115% de deduction','Vehicule 3,5-16t electrique/H2',
+      'Art. 39 decies A CGI : suramortissement jusqu\'a 115% pour les vehicules zero emission de 3,5 a 16 tonnes. Etendu jusqu\'en 2030.',
+      '',['Transport','Investissement']));
+    aides.push(mk('Remboursement accise gazole','0,15 a 0,31€/litre','Taxi et TRM',
+      'Taxis : 0,3155€/L rembourse. Transporteurs routiers : 0,1556€/L. Depuis 2025, demande via la declaration TVA (plus aux douanes).',
+      '',['Transport','Carburant']));
+    aides.push(mk('DFS Transport — 17% en 2026','17% de deduction forfaitaire','Conducteurs routiers',
+      'Deduction Forfaitaire Specifique de 17% sur l\'assiette des cotisations sociales pour les conducteurs. Phase-out progressif jusqu\'en 2035.',
+      '',['Transport','Social']));
+    aides.push(mk('Exoneration TVS','0€ de taxe vehicules','Taxi, VTC, transport voyageurs',
+      'Les taxis, VTC et transporteurs de voyageurs sont totalement exoneres de la taxe sur les vehicules de societes.',
+      '',['Transport','Fiscal']));
+    aides.push(mk('Exoneration CFE taxis','0€ de CFE','Taxi 1-2 vehicules',
+      'Les artisans taxis avec 1 ou 2 vehicules sont exoneres de Cotisation Fonciere des Entreprises.',
+      '',['Transport','Fiscal']));
+    aides.push(mk('Recuperation TVA vehicule taxi','100% de la TVA','Achat vehicule taxi',
+      'Exception unique : les taxis recuperent 100% de la TVA sur l\'achat de leur vehicule de tourisme (contrairement aux autres societes plafonnees).',
+      '',['Transport','TVA']));
+    aides.push(mk('OPCO Mobilites','Formation + 3 000€ prime apprenti','Secteur transport',
+      'OPCO Mobilites finance la formation et offre une prime de 3 000€ pour les apprentis dans les "metiers prioritaires" du transport.',
+      'https://www.opcomobilites.fr',['Transport','Formation','OPCO']));
+    aides.push(mk('Provision entretien vehicules','0,05€/km deductible','Flotte de vehicules',
+      'Provision pour grosses reparations a 0,05€/km. Sur un camion qui fait 100 000 km/an = 5 000€/an de deduction. Art. 39-1-5° CGI.',
+      '',['Transport','Comptabilite']));
   }
 
   // Arts / Culture / Sport (90xx-93xx)
   if(/^9[0-3]/.test(a)){
     aides.push(mk('Aides CNM / CNC / CNL','Subventions creation','Artiste / Producteur',
-      'Centre National de la Musique, du Cinema, du Livre : subventions a la creation, a la production, a la diffusion. Selon ton domaine.',
+      'Centre National de la Musique, du Cinema, du Livre : subventions a la creation, a la production, a la diffusion.',
       '',['Culture','Creation']));
     aides.push(mk('Credit d\'impot spectacle vivant','15-30% des depenses','Producteur spectacle',
-      'Credit d\'impot pour les depenses de creation, d\'exploitation et de numerisation de spectacles. Agrement CNC/CNM necessaire.',
+      'Credit d\'impot pour les depenses de creation, d\'exploitation et de numerisation de spectacles.',
       '',['Culture','Credit impot']));
   }
 
