@@ -959,6 +959,8 @@ function renderDashboard(el){
 
   ${renderSectorAlert(c)}
 
+  ${renderComparaison()}
+
   ${renderTresoreriePredictive(c)}
 
   ${bank?`
@@ -3733,6 +3735,99 @@ function renderDemarches(el){
   </div>`;
 }
 
+// ============ GUIDE CREATION ENTREPRISE ============
+function renderCreation(el){
+  const steps=[
+    {num:'1',icon:'💡',titre:'Choisir la forme juridique',desc:'SASU, EURL, SAS, SARL, micro... Le bon choix depend de ta situation.',
+      detail:'<b>Seul ?</b> SASU (assimile salarie, dividendes sans charges) ou EURL (TNS, moins cher en charges).<br><b>A plusieurs ?</b> SAS (flexible) ou SARL (cadre plus rigide mais connu).<br><b>Tester une idee ?</b> Micro-entreprise (0 frais, 5 min en ligne).<br><b>Immobilier ?</b> SCI.',
+      action:'goTo(\'assistant\')',actionLabel:'Demander conseil a l\'IA'},
+    {num:'2',icon:'📝',titre:'Rediger les statuts',desc:'Document fondateur de ta societe. Obligatoire sauf micro-entreprise.',
+      detail:'Contenu minimum : denomination, forme, siege, capital, objet social, duree, apports, repartition parts, dirigeant, exercice social.<br><br><b>Options :</b> Rediger toi-meme (modeles en ligne), plateforme juridique (~150€), ou avocat (~800-2000€).',
+      liens:[{l:'Modeles gratuits',u:'https://bpifrance-creation.fr/encyclopedie/creation-dune-societe/formalites-immatriculation/modeles-statuts'}]},
+    {num:'3',icon:'🏦',titre:'Deposer le capital social',desc:'Ouvrir un compte pro et deposer le capital (minimum 1€ pour SAS/SARL).',
+      detail:'<b>Banques en ligne :</b> Qonto, Shine, Blank — depot en 24h.<br><b>Banques classiques :</b> BNP, SG, CIC — RDV + 1-2 semaines.<br>Tu recois une <b>attestation de depot</b> necessaire pour l\'immatriculation.<br><br>Capital recommande : au moins 500-1000€ pour la credibilite.',
+      liens:[{l:'Qonto',u:'https://qonto.com'},{l:'Shine',u:'https://shine.fr'}]},
+    {num:'4',icon:'📰',titre:'Publier une annonce legale',desc:'Publication obligatoire dans un JAL (Journal d\'Annonces Legales).',
+      detail:'Cout : environ <b>150-250€</b> selon la forme et le departement.<br>Contenu : denomination, forme, capital, siege, objet, duree, dirigeant, RCS.<br>Delai : publication sous 24-48h.',
+      liens:[{l:'Legalstart',u:'https://annonces-legales.legalstart.fr'},{l:'Les Echos',u:'https://annonces-legales.lesechos.fr'}]},
+    {num:'5',icon:'🏛️',titre:'Immatriculer sur le guichet unique',desc:'Toutes les formalites en une seule demarche en ligne.',
+      detail:'Depuis 2023, tout passe par le <b>Guichet unique INPI</b> (formalites.entreprises.gouv.fr).<br>Documents a joindre : statuts signes, attestation depot capital, annonce legale, piece d\'identite, declaration de non-condamnation.<br>Cout : <b>37,45€</b> (greffe) + 15€ (BODACC).<br>Delai : 3-7 jours ouvrables.',
+      liens:[{l:'Guichet unique INPI',u:'https://formalites.entreprises.gouv.fr'}]},
+    {num:'6',icon:'📋',titre:'Obtenir tes numeros',desc:'SIREN, SIRET, code APE, numero TVA intracommunautaire.',
+      detail:'Apres immatriculation tu recois :<br>• <b>SIREN</b> (9 chiffres) — identifiant unique<br>• <b>SIRET</b> (14 chiffres) — SIREN + code etablissement<br>• <b>Code APE</b> — activite principale<br>• <b>N° TVA</b> — FR + 2 chiffres + SIREN<br><br>Delai : courrier INSEE sous 2-3 semaines. Consultable sur sirene.fr immediatement.'},
+    {num:'7',icon:'⚙️',titre:'Configurer FiscaPro',desc:'Entre ton SIREN et tout se remplit automatiquement.',
+      detail:'<b>C\'est la que tu es.</b> Entre ton SIREN dans FiscaPro → forme juridique, APE, regime TVA, regime fiscal : tout est detecte automatiquement. Importe tes statuts pour completer. Active l\'Expert IA. C\'est parti.',
+      action:'resetCompany()',actionLabel:'Configurer ma societe'},
+  ];
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🚀 Creer sa societe</h2><div class="top-s">Guide pas-a-pas — de l'idee a l'immatriculation</div></div></div>
+
+  <div class="al al-s" style="margin-bottom:16px"><span>⏱️</span><span><b>Duree totale : 1 a 2 semaines.</b> Cout : environ 250-500€ tout compris (hors avocat). Micro-entreprise : gratuit, 5 minutes en ligne.</span></div>
+
+  ${steps.map(s=>`
+  <div class="cd" style="padding:0;margin-bottom:8px;overflow:hidden;cursor:pointer;border-left:3px solid var(--acc)" onclick="document.getElementById('crea_${s.num}').classList.toggle('hide')">
+    <div style="padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0">${s.num}</div>
+        <div style="flex:1"><div style="font-size:14px;font-weight:700">${s.icon} ${s.titre}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:2px">${s.desc}</div></div>
+        <span style="color:var(--tx3)">▸</span>
+      </div>
+    </div>
+    <div id="crea_${s.num}" class="hide" style="padding:0 16px 14px;border-top:1px solid var(--brd)">
+      <div style="font-size:12px;color:var(--tx2);line-height:1.7;padding-top:10px">${s.detail}</div>
+      ${s.liens?`<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">${s.liens.map(l=>`<a href="${l.u}" target="_blank" rel="noopener" class="bt bt-s sm" style="text-decoration:none">🔗 ${l.l}</a>`).join('')}</div>`:''}
+      ${s.action?`<button class="bt bt-p sm" style="margin-top:10px" onclick="event.stopPropagation();${s.action}">${s.actionLabel}</button>`:''}
+    </div>
+  </div>`).join('')}
+
+  <div style="text-align:center;margin-top:16px">
+    <button class="bt bt-p" onclick="goTo('assistant')">💬 L'IA m'aide a choisir ma forme juridique</button>
+  </div>`;
+}
+
+// ============ COMPARAISON N vs N-1 ============
+function renderComparaison(){
+  const exos=getExercices();
+  if(exos.length<2)return'';
+  const prevYear=currentExercice-1;
+  if(!exos.includes(prevYear))return'';
+
+  // Compute N
+  const cN=compute();
+  // Compute N-1
+  const savedExo=currentExercice;
+  currentExercice=prevYear;
+  const cN1=compute();
+  currentExercice=savedExo;
+
+  const compare=(label,vN,vN1)=>{
+    const diff=vN-vN1;const pct=vN1!==0?((diff/Math.abs(vN1))*100).toFixed(1):vN>0?'100':'0';
+    const up=diff>0;const color=label.includes('Dep')||label.includes('IS')?(up?'var(--red)':'var(--grn)'):(up?'var(--grn)':'var(--red)');
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--brd)">
+      <span style="font-size:12px">${label}</span>
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="font-size:11px;color:var(--tx3)">${fmt(vN1)}</span>
+        <span style="font-size:11px">→</span>
+        <span style="font-size:12px;font-weight:700">${fmt(vN)}</span>
+        <span style="font-size:11px;font-weight:700;color:${color}">${up?'+':''}${pct}%</span>
+      </div>
+    </div>`;
+  };
+
+  return`
+  <div class="cd" style="margin-bottom:16px">
+    <div class="cd-t">📊 Comparaison ${prevYear} vs ${currentExercice}</div>
+    ${compare('Chiffre d\'affaires',cN.ca,cN1.ca)}
+    ${compare('Depenses',cN.dep,cN1.dep)}
+    ${compare('Resultat net',cN.net,cN1.net)}
+    ${compare('IS',cN.is,cN1.is)}
+    ${compare('Tresorerie',cN.treso,cN1.treso)}
+    ${compare('Encours clients',cN.encours,cN1.encours)}
+  </div>`;
+}
+
 // ============ MODE URGENCE ============
 function renderUrgence(el){
   el.innerHTML=`
@@ -3853,6 +3948,7 @@ render=function(){
       ${navItem('simul','📊','Simulateurs')}
       ${navItem('statuts','📜','Statuts & Docs')}
       ${navItem('settings','⚙️','Parametres')}
+      ${navItem('creation','🚀','Creer sa societe')}
       ${navItem('urgence','🆘','Mode Urgence')}
     </nav>
     <div class="side-foot">FiscaPro v3.0 — 2025/2026<br>⚠️ Ne remplace pas un expert-comptable</div>
@@ -3885,6 +3981,7 @@ renderPage=function(){
     case'settings':renderSettings(pg);break;
     case'import':renderImportBancaire(pg);break;
     case'frais':renderFrais(pg);break;
+    case'creation':renderCreation(pg);break;
     case'urgence':renderUrgence(pg);break;
   }
 };
