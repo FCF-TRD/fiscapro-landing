@@ -2760,6 +2760,203 @@ window.markPaid=(num)=>{
   const f=factures.find(f=>f.desc&&f.client);if(f)f.paye=true;persist();renderPage();
 };
 
+// ============ RELANCES IMPAYES ============
+function renderRelances(el){
+  const invs=load('invoices',[]).filter(i=>!i.paid);
+  const now=new Date();
+  // Classify by severity
+  const impayes=invs.map(inv=>{
+    const due=new Date(inv.due);const retard=Math.max(0,Math.floor((now-due)/(86400000)));
+    const tauxLegal=6.82;const tauxPenalite=tauxLegal*3;
+    const penalites=retard>0?Math.round(inv.totalTTC*tauxPenalite/100/365*retard*100)/100:0;
+    const indemnite=retard>0?40:0;
+    const totalDu=inv.totalTTC+penalites+indemnite;
+    let phase='amiable1';
+    if(retard>60)phase='contentieux';
+    else if(retard>30)phase='miseEnDemeure';
+    else if(retard>15)phase='amiable2';
+    else if(retard>0)phase='amiable1';
+    else phase='aVenir';
+    const relances=load('relances_'+inv.num,[]);
+    return{...inv,retard,penalites,indemnite,totalDu,phase,relances};
+  }).sort((a,b)=>b.retard-a.retard);
+
+  const totalImpayes=impayes.reduce((s,i)=>s+i.totalTTC,0);
+  const totalPenalites=impayes.reduce((s,i)=>s+i.penalites+i.indemnite,0);
+  const enRetard=impayes.filter(i=>i.retard>0);
+
+  el.innerHTML=`
+  <div class="top"><div><h2>📨 Relances impayes</h2><div class="top-s">Gestion professionnelle du recouvrement</div></div></div>
+
+  ${impayes.length===0?`<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">✅</div><div style="font-size:16px;font-weight:700">Aucune facture impayee</div><div style="font-size:13px;margin-top:4px">Toutes tes factures sont reglees. Bravo !</div></div>`:`
+
+  <!-- KPIs -->
+  <div class="gr g4 kpi-grid" style="margin-bottom:16px">
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--red)">${fmt(totalImpayes)}</div><div class="kpi-l">Total impayes</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--org)">${enRetard.length}</div><div class="kpi-l">En retard</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--pur)">${fmt(totalPenalites)}</div><div class="kpi-l">Penalites + indemnites</div></div>
+    <div class="cd kpi"><div class="kpi-v">${enRetard.length>0?Math.round(enRetard.reduce((s,i)=>s+i.retard,0)/enRetard.length):0}j</div><div class="kpi-l">Retard moyen</div></div>
+  </div>
+
+  <!-- PROCESSUS -->
+  <div class="cd" style="margin-bottom:16px;padding:14px 16px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:1px;margin-bottom:10px">Processus de recouvrement</div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap">
+      ${[{l:'Relance amiable 1',j:'J+1 a J+15',c:'var(--org)',n:impayes.filter(i=>i.phase==='amiable1'&&i.retard>0).length},
+        {l:'Relance amiable 2',j:'J+15 a J+30',c:'var(--org)',n:impayes.filter(i=>i.phase==='amiable2').length},
+        {l:'Mise en demeure',j:'J+30 a J+60',c:'var(--red)',n:impayes.filter(i=>i.phase==='miseEnDemeure').length},
+        {l:'Contentieux',j:'J+60+',c:'var(--red)',n:impayes.filter(i=>i.phase==='contentieux').length}
+      ].map(p=>`<div style="flex:1;min-width:100px;padding:8px 10px;border-radius:6px;background:${p.c}08;border:1px solid ${p.c}20;text-align:center">
+        <div style="font-size:16px;font-weight:900;color:${p.c}">${p.n}</div>
+        <div style="font-size:10px;font-weight:700;color:${p.c}">${p.l}</div>
+        <div style="font-size:9px;color:var(--tx3)">${p.j}</div>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- LISTE IMPAYES -->
+  ${impayes.filter(i=>i.retard>0).map(inv=>{
+    const phaseColors={amiable1:'var(--org)',amiable2:'var(--org)',miseEnDemeure:'var(--red)',contentieux:'var(--red)'};
+    const phaseLabels={amiable1:'Relance amiable',amiable2:'2e relance',miseEnDemeure:'Mise en demeure',contentieux:'Contentieux'};
+    const col=phaseColors[inv.phase]||'var(--tx3)';
+    return`
+    <div class="cd" style="margin-bottom:8px;border-left:3px solid ${col}">
+      <div style="display:flex;justify-content:space-between;align-items:start;gap:10px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:14px;font-weight:700">F-${String(inv.num).padStart(4,'0')} — ${inv.clientName}</div>
+          <div style="font-size:11px;color:var(--tx3)">${inv.objet||''} — Echeance: ${fmtD(inv.due)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:18px;font-weight:900;color:var(--red)">${fmt2(inv.totalTTC)}</div>
+          <span class="tg" style="background:${col}15;color:${col}">${inv.retard}j de retard — ${phaseLabels[inv.phase]}</span>
+        </div>
+      </div>
+
+      ${inv.penalites>0?`
+      <div style="margin-top:10px;padding:8px 10px;background:var(--bg3);border-radius:6px;font-size:11px;display:flex;gap:12px;flex-wrap:wrap">
+        <div>Penalites de retard (${(6.82*3).toFixed(2)}%/an): <b style="color:var(--red)">${fmt2(inv.penalites)}</b></div>
+        <div>Indemnite forfaitaire: <b style="color:var(--red)">${fmt2(inv.indemnite)}</b></div>
+        <div>Total du avec penalites: <b style="color:var(--red)">${fmt2(inv.totalDu)}</b></div>
+      </div>`:''}
+
+      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+        ${inv.phase==='amiable1'||inv.phase==='amiable2'?`<button class="bt bt-s sm" onclick="genRelance(${inv.num},'amiable')">📧 Relance amiable</button>`:''}
+        ${inv.phase==='amiable2'||inv.phase==='miseEnDemeure'?`<button class="bt bt-d sm" style="background:rgba(220,53,69,.1)" onclick="genRelance(${inv.num},'miseEnDemeure')">📮 Mise en demeure AR</button>`:''}
+        ${inv.phase==='contentieux'?`<button class="bt bt-d sm" onclick="genRelance(${inv.num},'injonction')">⚖️ Requete injonction de payer</button>`:''}
+        <button class="bt bt-g sm" onclick="markPaid(${inv.num})">✅ Marquer payee</button>
+        <button class="bt bt-s sm" onclick="logRelance(${inv.num})">📝 Noter un suivi</button>
+      </div>
+
+      ${inv.relances.length>0?`
+      <div style="margin-top:10px;border-top:1px solid var(--brd);padding-top:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--tx3);text-transform:uppercase;margin-bottom:4px">Historique de suivi</div>
+        ${inv.relances.map(r=>`<div style="font-size:11px;color:var(--tx2);padding:2px 0">📌 ${fmtD(r.date)} — ${r.note}</div>`).join('')}
+      </div>`:''}
+    </div>`;
+  }).join('')}
+
+  ${impayes.filter(i=>i.retard===0).length>0?`
+  <div style="margin-top:16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:1px;padding-left:4px;margin-bottom:6px">A venir (pas encore en retard)</div>
+  ${impayes.filter(i=>i.retard===0).map(inv=>`
+    <div class="cd" style="padding:10px 14px;margin-bottom:4px;opacity:.6">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px"><b>F-${String(inv.num).padStart(4,'0')}</b> — ${inv.clientName} — Echeance ${fmtD(inv.due)}</div>
+        <div style="font-size:13px;font-weight:700">${fmt2(inv.totalTTC)}</div>
+      </div>
+    </div>`).join('')}
+  `:''}
+
+  <div class="al al-i" style="margin-top:16px"><span>⚖️</span><span><b>Base legale :</b> Art. L441-10 du Code de commerce — penalites de retard = 3x taux d'interet legal (${(6.82*3).toFixed(2)}%/an en 2026) + indemnite forfaitaire de 40€ pour frais de recouvrement. Ces penalites sont exigibles de plein droit, sans rappel prealable.</span></div>
+  `}`;
+}
+
+window.genRelance=(num,type)=>{
+  const invs=load('invoices',[]);const inv=invs.find(i=>i.num===num);if(!inv)return;
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const due=new Date(inv.due);const now=new Date();const retard=Math.max(0,Math.floor((now-due)/86400000));
+  const tauxPenalite=(6.82*3).toFixed(2);
+  const penalites=Math.round(inv.totalTTC*6.82*3/100/365*retard*100)/100;
+
+  const templates={
+    amiable:docHeader('Lettre de relance amiable','Facture F-'+String(inv.num).padStart(4,'0'),false)
+    +'<div style="margin:20px 0"><div class="inv-box"><b>Destinataire :</b><br>'+(inv.clientName||'')+'<br>'+(inv.clientAddr||'')+'</div></div>'
+    +'<div style="margin-bottom:20px;font-size:13px;line-height:1.8">'
+    +'<p>Madame, Monsieur,</p><br>'
+    +'<p>Sauf erreur de notre part, nous n\'avons pas recu le reglement de la facture suivante :</p><br>'
+    +'<table><tr><td class="bold">Facture</td><td>F-'+String(inv.num).padStart(4,'0')+'</td></tr>'
+    +'<tr><td class="bold">Date</td><td>'+fmtD(inv.date)+'</td></tr>'
+    +'<tr><td class="bold">Echeance</td><td>'+fmtD(inv.due)+'</td></tr>'
+    +'<tr><td class="bold">Montant TTC</td><td class="bold" style="color:#DC3545">'+fmt2(inv.totalTTC)+'</td></tr>'
+    +'<tr><td class="bold">Retard</td><td>'+retard+' jours</td></tr></table><br>'
+    +'<p>Nous vous prions de bien vouloir proceder au reglement de cette somme dans les <b>8 jours</b> suivant la reception de ce courrier.</p><br>'
+    +'<p>Si le reglement a ete effectue entre-temps, nous vous prions de ne pas tenir compte de ce rappel.</p><br>'
+    +'<p>Nous restons a votre disposition pour tout renseignement complementaire.</p><br>'
+    +'<p>Cordialement,</p><br>'
+    +'<p><b>'+(company.nom||'')+'</b></p>'
+    +'</div>',
+
+    miseEnDemeure:docHeader('MISE EN DEMEURE','Facture F-'+String(inv.num).padStart(4,'0')+' — Lettre recommandee avec accuse de reception',false)
+    +'<div style="margin:20px 0"><div class="inv-box"><b>Destinataire :</b><br>'+(inv.clientName||'')+'<br>'+(inv.clientAddr||'')+'</div></div>'
+    +'<div style="margin-bottom:20px;font-size:13px;line-height:1.8">'
+    +'<p>Madame, Monsieur,</p><br>'
+    +'<p>Malgre notre relance du [DATE RELANCE], nous constatons que la facture ci-dessous demeure impayee :</p><br>'
+    +'<table><tr><td class="bold">Facture</td><td>F-'+String(inv.num).padStart(4,'0')+'</td></tr>'
+    +'<tr><td class="bold">Montant TTC</td><td class="bold" style="color:#DC3545">'+fmt2(inv.totalTTC)+'</td></tr>'
+    +'<tr><td class="bold">Echeance</td><td>'+fmtD(inv.due)+'</td></tr>'
+    +'<tr><td class="bold">Retard</td><td class="bold" style="color:#DC3545">'+retard+' jours</td></tr>'
+    +'<tr><td class="bold">Penalites de retard ('+tauxPenalite+'%/an)</td><td class="bold" style="color:#DC3545">'+fmt2(penalites)+'</td></tr>'
+    +'<tr><td class="bold">Indemnite forfaitaire (art. D441-5 C. com.)</td><td class="bold" style="color:#DC3545">40,00 EUR</td></tr>'
+    +'<tr class="total-row"><td class="bold">TOTAL DU</td><td class="bold">'+fmt2(inv.totalTTC+penalites+40)+'</td></tr></table><br>'
+    +'<p>Par la presente, nous vous mettons <b>formellement en demeure</b> de nous regler la somme de <b>'+fmt2(inv.totalTTC+penalites+40)+'</b> dans un delai de <b>8 jours</b> a compter de la reception de ce courrier.</p><br>'
+    +'<p><b>A defaut de reglement dans ce delai</b>, nous nous reservons le droit de :</p>'
+    +'<ul style="margin:8px 0 8px 20px"><li>Saisir le Tribunal de Commerce d\'une requete en injonction de payer (art. 1405 CPC)</li>'
+    +'<li>Transmettre le dossier a un cabinet de recouvrement</li>'
+    +'<li>Proceder a une declaration de creance aupres du Greffe</li></ul><br>'
+    +'<p>Nous vous informons que conformement a l\'article L441-10 du Code de commerce, les penalites de retard et l\'indemnite forfaitaire de 40 EUR pour frais de recouvrement sont exigibles de plein droit.</p><br>'
+    +'<p>Veuillez agreer, Madame, Monsieur, l\'expression de nos salutations distinguees.</p><br>'
+    +'<p><b>'+(company.nom||'')+'</b></p>'
+    +'</div>'
+    +'<div style="margin-top:20px;padding:12px;background:#FEE2E2;border-radius:6px;font-size:11px;color:#DC3545;line-height:1.6"><b>IMPORTANT :</b> Cette lettre doit etre envoyee en <b>recommande avec accuse de reception</b>. Conservez le recepisse et l\'AR comme preuve. Ce document est necessaire pour toute procedure judiciaire ulterieure.</div>',
+
+    injonction:docHeader('Requete en injonction de payer','Tribunal de Commerce — Art. 1405 et suivants du CPC',false)
+    +'<div style="margin:20px 0;font-size:13px;line-height:1.8">'
+    +'<p><b>A l\'attention de Monsieur le President du Tribunal de Commerce de [VILLE]</b></p><br>'
+    +'<p>La societe <b>'+(company.nom||'')+'</b>, '+t.f+', au capital de '+fmt(company.capital||0)+', SIREN '+(company.siren||'')+', dont le siege est au '+(company.adresse||'')+', representee par '+(company.dirigeant||'son representant legal')+', en qualite de '+(t.dir)+',</p><br>'
+    +'<p>a l\'honneur de solliciter de votre juridiction qu\'il lui plaise de rendre une ordonnance portant injonction de payer a l\'encontre de :</p><br>'
+    +'<div class="inv-box"><b>Debiteur :</b><br>'+(inv.clientName||'[NOM DU DEBITEUR]')+'<br>'+(inv.clientAddr||'[ADRESSE]')+(inv.clientSiren?'<br>SIREN: '+inv.clientSiren:'')+'</div><br>'
+    +'<p>La somme de <b>'+fmt2(inv.totalTTC+penalites+40)+'</b> decomposee comme suit :</p>'
+    +'<table><tr><td>Principal (facture F-'+String(inv.num).padStart(4,'0')+')</td><td class="right-align bold">'+fmt2(inv.totalTTC)+'</td></tr>'
+    +'<tr><td>Penalites de retard ('+tauxPenalite+'%/an x '+retard+'j)</td><td class="right-align">'+fmt2(penalites)+'</td></tr>'
+    +'<tr><td>Indemnite forfaitaire recouvrement (art. D441-5)</td><td class="right-align">40,00 EUR</td></tr>'
+    +'<tr class="total-row"><td class="bold">TOTAL</td><td class="right-align bold">'+fmt2(inv.totalTTC+penalites+40)+'</td></tr></table><br>'
+    +'<p><b>Pieces justificatives jointes :</b></p>'
+    +'<ul style="margin:8px 0 8px 20px"><li>Copie de la facture F-'+String(inv.num).padStart(4,'0')+'</li>'
+    +'<li>Copie de la mise en demeure et de l\'AR</li>'
+    +'<li>Copie du Kbis du demandeur</li>'
+    +'<li>Releve de compte attestant du non-paiement</li></ul><br>'
+    +'<p>Fait a [VILLE], le '+new Date().toLocaleDateString('fr-FR')+'</p><br>'
+    +'<p>Signature :</p>'
+    +'</div>'
+    +'<div style="margin-top:20px;padding:12px;background:rgba(37,99,235,.06);border-radius:6px;font-size:11px;color:#2563EB;line-height:1.6"><b>Procedure :</b> Deposer cette requete au Greffe du Tribunal de Commerce competent (lieu du siege du debiteur). Cout : 33,47 EUR. Le juge rend une ordonnance sous 15 jours. Si favorable, la signifier par huissier au debiteur qui a 1 mois pour contester.</div>'
+  };
+
+  openDocWindow((type==='amiable'?'Relance amiable':type==='miseEnDemeure'?'Mise en demeure':'Requete injonction')+' — F-'+String(inv.num).padStart(4,'0'),templates[type]);
+
+  // Log the relance
+  const relances=load('relances_'+inv.num,[]);
+  relances.push({date:today(),note:type==='amiable'?'Relance amiable envoyee':type==='miseEnDemeure'?'Mise en demeure AR envoyee':'Requete injonction de payer preparee'});
+  save('relances_'+inv.num,relances);
+};
+
+window.logRelance=(num)=>{
+  const note=prompt('Note de suivi (ex: appel telephonique, promesse de paiement, relance email...)');
+  if(!note)return;
+  const relances=load('relances_'+num,[]);
+  relances.push({date:today(),note});
+  save('relances_'+num,relances);
+  renderPage();
+};
+
 // ============ DEVIS ============
 window.openNewDevis=()=>{
   const t=TYPES[company?.type]||TYPES.SAS;
@@ -3279,6 +3476,7 @@ render=function(){
       ${navItem('previsionnel','📈','Previsionnel')}
       ${navItem('opti','⭐','Optimisation')}
       ${navItem('aides','🎁','Aides & Subventions')}
+      ${navItem('relances','📨','Relances impayes')}
       <div class="nav-s">Fiscal</div>
       ${navItem('echeancier','📅','Echeancier')}
       ${navItem('declarations','🏛️','Declarations')}
@@ -3312,6 +3510,7 @@ renderPage=function(){
     case'assistant':renderAssistant(pg);break;
     case'opti':renderOpti(pg);break;
     case'aides':renderAides(pg);break;
+    case'relances':renderRelances(pg);break;
     case'agents':renderAgents(pg);break;
     case'simul':renderSimul(pg);break;
     case'veille':renderVeille(pg);break;
