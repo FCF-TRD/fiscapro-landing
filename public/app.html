@@ -3781,6 +3781,310 @@ function renderDemarches(el){
 let creaData=load('creaData',{step:0,nbAssocies:'1',activite:'services',ca_prevu:'',protection:'maximum',nom:'',prenom:'',dateNaissance:'',adresse:'',denomination:'',objet:'',siege:'',capital:200,apeDesc:''});
 function saveCrea(){save('creaData',creaData);}
 
+// ============ DOCUMENTS JURIDIQUES ============
+function renderJuridique(el){
+  const c=compute();
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const isUnipersonnelle=company?.type==='SASU'||company?.type==='EURL';
+  const docs=[
+    {id:'ago',icon:'📋',title:'PV d\'Assemblee Generale Ordinaire',desc:'Approbation des comptes annuels, affectation du resultat et quitus au dirigeant.',color:'var(--acc)'},
+    {id:'age_siege',icon:'🏠',title:'PV AGE — Changement de siege social',desc:'Proces-verbal de transfert du siege social de la societe.',color:'var(--blu)'},
+    {id:'age_capital',icon:'💰',title:'PV AGE — Augmentation de capital',desc:'Proces-verbal d\'augmentation du capital social.',color:'var(--pur)'},
+    {id:'age_denom',icon:'✏️',title:'PV AGE — Changement de denomination',desc:'Proces-verbal de changement de denomination sociale.',color:'var(--org)'},
+    {id:'demission',icon:'🚪',title:'Lettre de demission du dirigeant',desc:'Modele de lettre de demission du '+t.dir.toLowerCase()+' de la societe.',color:'var(--red)'},
+    {id:'attestation',icon:'✋',title:'Attestation sur l\'honneur',desc:'Modele generique d\'attestation sur l\'honneur personnalisable.',color:'var(--cya)'},
+    {id:'decision_unique',icon:'👤',title:'PV de decision de l\'associe unique',desc:'Decision de l\'associe unique (SASU/EURL) — approbation des comptes.',color:'var(--grn2)',visible:isUnipersonnelle},
+    {id:'prestation',icon:'📄',title:'Contrat de prestation de services',desc:'Modele de contrat de prestation de services entre professionnel et client.',color:'var(--acc3)'}
+  ];
+  el.innerHTML=`
+  <div class="top"><div><h2>⚖️ Documents juridiques</h2><div class="top-s">Generez vos documents juridiques pre-remplis avec les informations de votre societe</div></div></div>
+  <div class="al al-i" style="margin-bottom:18px">
+    <span>ℹ️</span><div>Ces modeles sont fournis a titre indicatif. Pour toute situation complexe, consultez un avocat ou un expert-comptable. Les documents sont pre-remplis avec les donnees de <b>${company.nom||'votre societe'}</b>.</div>
+  </div>
+  <div class="gr g3" style="gap:14px">
+    ${docs.filter(d=>d.visible!==false).map(d=>`
+      <div class="cd" style="border-top:3px solid ${d.color};cursor:pointer;transition:all .15s" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 16px rgba(0,0,0,.08)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
+        <div style="font-size:32px;margin-bottom:10px">${d.icon}</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;color:var(--tx)">${d.title}</div>
+        <div style="font-size:11px;color:var(--tx3);line-height:1.5;margin-bottom:14px;min-height:36px">${d.desc}</div>
+        <button class="bt bt-p sm" onclick="window.genJuridique('${d.id}')" style="width:100%">⚖️ Generer</button>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+window.genJuridique=function(id){
+  const c=compute();
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const nom=company.nom||'[NOM SOCIETE]';
+  const type=t.f||'[FORME JURIDIQUE]';
+  const capital=company.capital||'[CAPITAL]';
+  const siren=company.siren||'[SIREN]';
+  const adresse=company.adresse||'[ADRESSE]';
+  const dirigeant=company.dirigeant||'[NOM DU DIRIGEANT]';
+  const d=new Date().toLocaleDateString('fr-FR');
+  const exercice=currentExercice||new Date().getFullYear();
+  const ca=fmt(c.ca);
+  const resultat=fmt(c.ben);
+  const resultatNum=c.ben||0;
+  const reserveLegale=fmt(resultatNum>0?resultatNum*0.05:0);
+  const reportNouveau=fmt(resultatNum>0?resultatNum*0.95:resultatNum);
+
+  switch(id){
+    case 'ago':{
+      const body=docHeader('PROCES-VERBAL DE L\'ASSEMBLEE GENERALE ORDINAIRE','Exercice clos le 31/12/'+exercice,false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px">L\'an <b>'+new Date().getFullYear()+'</b>, le <b>'+d+'</b>,</p>'
+      +'<p style="margin-bottom:14px">Les associes de la societe <b>'+nom+'</b>, '+type+' au capital de <b>'+fmt(capital)+'</b>, dont le siege social est situe au <b>'+adresse+'</b>, immatriculee au RCS sous le numero SIREN <b>'+siren+'</b>,</p>'
+      +'<p style="margin-bottom:14px">se sont reunis en Assemblee Generale Ordinaire au siege social, sur convocation du '+t.dir+' faite selon les formes et delais prevus par les statuts.</p>'
+      +'<p style="margin-bottom:14px"><b>'+t.dir+' :</b> '+dirigeant+'</p>'
+      +'<p style="margin-bottom:22px">Le '+t.dir+' constate que tous les associes sont presents ou representes. L\'assemblee peut donc valablement deliberer.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Ordre du jour</div>'
+      +'<ol style="padding-left:18px;margin-bottom:14px;line-height:2">'
+      +'<li>Approbation des comptes de l\'exercice clos le 31/12/'+exercice+'</li>'
+      +'<li>Affectation du resultat</li>'
+      +'<li>Quitus au '+t.dir.toLowerCase()+'</li>'
+      +'</ol></div>'
+      +'<div class="section"><div class="section-title">Premiere resolution — Approbation des comptes</div>'
+      +'<p style="margin-bottom:10px">L\'Assemblee Generale, apres avoir entendu la lecture du rapport de gestion du '+t.dir+', approuve les comptes de l\'exercice clos le 31 decembre '+exercice+' tels qu\'ils lui ont ete presentes, a savoir :</p>'
+      +'<table><tr><td style="padding:8px 12px;font-weight:700">Chiffre d\'affaires</td><td style="padding:8px 12px;text-align:right;font-weight:700">'+ca+'</td></tr>'
+      +'<tr><td style="padding:8px 12px;font-weight:700">Resultat de l\'exercice</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:'+(resultatNum>=0?'#0A6847':'#DC3545')+'">'+resultat+'</td></tr></table>'
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Deuxieme resolution — Affectation du resultat</div>'
+      +(resultatNum>=0
+        ?'<p style="margin-bottom:10px">L\'Assemblee Generale decide d\'affecter le benefice de l\'exercice s\'elevant a <b>'+resultat+'</b> de la maniere suivante :</p>'
+        +'<table><tr><td style="padding:8px 12px">Reserve legale (5%)</td><td style="padding:8px 12px;text-align:right;font-weight:600">'+reserveLegale+'</td></tr>'
+        +'<tr><td style="padding:8px 12px">Report a nouveau</td><td style="padding:8px 12px;text-align:right;font-weight:600">'+reportNouveau+'</td></tr></table>'
+        :'<p style="margin-bottom:10px">L\'Assemblee Generale constate que l\'exercice se solde par une perte de <b>'+resultat+'</b>. Elle decide de reporter cette perte au compte « Report a nouveau debiteur ».</p>'
+      )
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Troisieme resolution — Quitus au '+t.dir.toLowerCase()+'</div>'
+      +'<p style="margin-bottom:10px">L\'Assemblee Generale donne quitus entier et sans reserve au '+t.dir+', <b>'+dirigeant+'</b>, de sa gestion au cours de l\'exercice ecoule.</p>'
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Cloture</div>'
+      +'<p style="margin-bottom:10px">Plus rien n\'etant a l\'ordre du jour, la seance est levee.</p>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:40px;display:flex;justify-content:space-between">'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px;color:var(--tx3)">Le '+t.dir+'<br><b>'+dirigeant+'</b></div></div>'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px;color:var(--tx3)">Signature associe(s)</div></div>'
+      +'</div>';
+      openDocWindow('PV AGO — '+nom,body);
+      break;
+    }
+    case 'age_siege':{
+      const body=docHeader('PROCES-VERBAL DE L\'ASSEMBLEE GENERALE EXTRAORDINAIRE','Transfert du siege social',false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px">L\'an <b>'+new Date().getFullYear()+'</b>, le <b>'+d+'</b>,</p>'
+      +'<p style="margin-bottom:14px">Les associes de la societe <b>'+nom+'</b>, '+type+' au capital de <b>'+fmt(capital)+'</b>, dont le siege social est situe au <b>'+adresse+'</b>, immatriculee au RCS sous le numero SIREN <b>'+siren+'</b>,</p>'
+      +'<p style="margin-bottom:14px">se sont reunis en Assemblee Generale Extraordinaire au siege social, sur convocation du '+t.dir+' faite selon les formes et delais prevus par les statuts.</p>'
+      +'<p style="margin-bottom:22px">Le '+t.dir+' constate que tous les associes sont presents ou representes. L\'assemblee peut donc valablement deliberer.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Resolution unique — Transfert du siege social</div>'
+      +'<p style="margin-bottom:10px">L\'Assemblee Generale Extraordinaire decide de transferer le siege social de la societe de :</p>'
+      +'<p style="margin:10px 0;padding:10px 14px;background:#F0F5F2;border-radius:6px"><b>Ancienne adresse :</b> '+adresse+'</p>'
+      +'<p style="margin:10px 0;padding:10px 14px;background:#FEF3C7;border-radius:6px"><b>Nouvelle adresse :</b> <span style="color:#DC3545">[A COMPLETER]</span></p>'
+      +'<p style="margin:14px 0">L\'Assemblee decide en consequence de modifier l\'article des statuts relatif au siege social pour y mentionner la nouvelle adresse ci-dessus.</p>'
+      +'<p style="margin-bottom:10px">L\'Assemblee confere tous pouvoirs au '+t.dir+' pour accomplir les formalites de publicite legale et de depot au greffe.</p>'
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Cloture</div>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:40px;display:flex;justify-content:space-between">'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Le '+t.dir+'<br><b>'+dirigeant+'</b></div></div>'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Signature associe(s)</div></div>'
+      +'</div>';
+      openDocWindow('PV AGE Siege — '+nom,body);
+      break;
+    }
+    case 'age_capital':{
+      const body=docHeader('PROCES-VERBAL DE L\'ASSEMBLEE GENERALE EXTRAORDINAIRE','Augmentation du capital social',false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px">L\'an <b>'+new Date().getFullYear()+'</b>, le <b>'+d+'</b>,</p>'
+      +'<p style="margin-bottom:14px">Les associes de la societe <b>'+nom+'</b>, '+type+' au capital de <b>'+fmt(capital)+'</b>, dont le siege social est situe au <b>'+adresse+'</b>, immatriculee au RCS sous le numero SIREN <b>'+siren+'</b>,</p>'
+      +'<p style="margin-bottom:14px">se sont reunis en Assemblee Generale Extraordinaire.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Resolution unique — Augmentation du capital social</div>'
+      +'<p style="margin-bottom:10px">L\'Assemblee Generale Extraordinaire, apres avoir entendu le rapport du '+t.dir+', decide d\'augmenter le capital social de la societe :</p>'
+      +'<table>'
+      +'<tr><td style="padding:8px 12px;font-weight:600">Capital actuel</td><td style="padding:8px 12px;text-align:right">'+fmt(capital)+'</td></tr>'
+      +'<tr><td style="padding:8px 12px;font-weight:600">Augmentation</td><td style="padding:8px 12px;text-align:right;color:#DC3545"><b>[MONTANT A COMPLETER]</b></td></tr>'
+      +'<tr style="background:#F0F5F2"><td style="padding:8px 12px;font-weight:700">Nouveau capital</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#0A6847"><b>[A COMPLETER]</b></td></tr>'
+      +'</table>'
+      +'<p style="margin:14px 0">Cette augmentation sera realisee par <span style="color:#DC3545"><b>[creation d\'actions nouvelles / elevation de la valeur nominale]</b></span>, liberee integralement par apport en numeraire.</p>'
+      +'<p style="margin:14px 0">L\'Assemblee decide en consequence de modifier l\'article des statuts relatif au capital social.</p>'
+      +'<p style="margin:14px 0">L\'Assemblee confere tous pouvoirs au '+t.dir+' pour accomplir les formalites de publicite legale et de depot au greffe.</p>'
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Cloture</div>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:40px;display:flex;justify-content:space-between">'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Le '+t.dir+'<br><b>'+dirigeant+'</b></div></div>'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Signature associe(s)</div></div>'
+      +'</div>';
+      openDocWindow('PV AGE Capital — '+nom,body);
+      break;
+    }
+    case 'age_denom':{
+      const body=docHeader('PROCES-VERBAL DE L\'ASSEMBLEE GENERALE EXTRAORDINAIRE','Changement de denomination sociale',false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px">L\'an <b>'+new Date().getFullYear()+'</b>, le <b>'+d+'</b>,</p>'
+      +'<p style="margin-bottom:14px">Les associes de la societe <b>'+nom+'</b>, '+type+' au capital de <b>'+fmt(capital)+'</b>, dont le siege social est situe au <b>'+adresse+'</b>, immatriculee au RCS sous le numero SIREN <b>'+siren+'</b>,</p>'
+      +'<p style="margin-bottom:14px">se sont reunis en Assemblee Generale Extraordinaire.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Resolution unique — Changement de denomination sociale</div>'
+      +'<p style="margin-bottom:10px">L\'Assemblee Generale Extraordinaire decide de changer la denomination sociale de la societe :</p>'
+      +'<p style="margin:10px 0;padding:10px 14px;background:#F0F5F2;border-radius:6px"><b>Ancienne denomination :</b> '+nom+'</p>'
+      +'<p style="margin:10px 0;padding:10px 14px;background:#FEF3C7;border-radius:6px"><b>Nouvelle denomination :</b> <span style="color:#DC3545">[A COMPLETER]</span></p>'
+      +'<p style="margin:14px 0">L\'Assemblee decide en consequence de modifier l\'article premier des statuts relatif a la denomination sociale pour y substituer la nouvelle denomination ci-dessus.</p>'
+      +'<p style="margin:14px 0">A compter de ce jour, la societe sera designee sous la denomination : <span style="color:#DC3545"><b>[NOUVELLE DENOMINATION]</b></span>.</p>'
+      +'<p style="margin:14px 0">L\'Assemblee confere tous pouvoirs au '+t.dir+' pour accomplir les formalites de publicite legale et de depot au greffe.</p>'
+      +'<p style="margin-bottom:6px"><b>Cette resolution est adoptee a l\'unanimite.</b></p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Cloture</div>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:40px;display:flex;justify-content:space-between">'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Le '+t.dir+'<br><b>'+dirigeant+'</b></div></div>'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Signature associe(s)</div></div>'
+      +'</div>';
+      openDocWindow('PV AGE Denomination — '+nom,body);
+      break;
+    }
+    case 'demission':{
+      const body=docHeader('LETTRE DE DEMISSION','Demission du '+t.dir,false)
+      +'<div class="section">'
+      +'<div style="text-align:right;margin-bottom:30px">'
+      +'<p>'+dirigeant+'</p>'
+      +'<p>'+t.dir+' de '+nom+'</p>'
+      +'<p>'+adresse+'</p>'
+      +'<p style="margin-top:14px">'+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<p style="margin-bottom:10px"><b>Objet : Demission de mes fonctions de '+t.dir+'</b></p>'
+      +'<p style="margin-bottom:14px">Madame, Monsieur,</p>'
+      +'<p style="margin-bottom:14px">Par la presente, je soussigne(e) <b>'+dirigeant+'</b>, vous informe de ma decision de demissionner de mes fonctions de '+t.dir+' de la societe <b>'+nom+'</b>, '+type+' au capital de '+fmt(capital)+', immatriculee sous le numero SIREN '+siren+', dont le siege social est situe au '+adresse+'.</p>'
+      +'<p style="margin-bottom:14px">Cette demission prendra effet a compter du <span style="color:#DC3545"><b>[DATE A COMPLETER]</b></span>.</p>'
+      +'<p style="margin-bottom:14px">Je m\'engage a assurer la transition de mes fonctions dans les meilleures conditions possibles et a remettre l\'ensemble des documents et biens de la societe en ma possession.</p>'
+      +'<p style="margin-bottom:14px">Je vous prie d\'agreer, Madame, Monsieur, l\'expression de mes salutations distinguees.</p>'
+      +'</div>'
+      +'<div style="margin-top:50px;text-align:right;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px;display:inline-block;min-width:200px;text-align:center">'+dirigeant+'<br><i>Signature</i></div></div>';
+      openDocWindow('Demission '+t.dir+' — '+nom,body);
+      break;
+    }
+    case 'attestation':{
+      const body=docHeader('ATTESTATION SUR L\'HONNEUR','Document officiel',false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:20px;font-size:15px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px">ATTESTATION SUR L\'HONNEUR</p>'
+      +'<p style="margin-bottom:14px">Je soussigne(e) <b>'+dirigeant+'</b>, agissant en qualite de '+t.dir+' de la societe <b>'+nom+'</b>, '+type+' au capital de '+fmt(capital)+', immatriculee sous le numero SIREN '+siren+', dont le siege social est situe au '+adresse+',</p>'
+      +'<p style="margin-bottom:14px">atteste sur l\'honneur :</p>'
+      +'<div style="margin:18px 0;padding:16px 20px;background:#F0F5F2;border-left:3px solid #0A6847;border-radius:0 6px 6px 0;min-height:60px">'
+      +'<p style="color:#DC3545;font-weight:600">[OBJET DE L\'ATTESTATION A COMPLETER]</p>'
+      +'</div>'
+      +'<p style="margin-bottom:14px">Je suis informe(e) que toute fausse declaration est passible de sanctions penales conformement a l\'article 441-7 du Code Penal.</p>'
+      +'<p style="margin-bottom:14px">Fait pour servir et valoir ce que de droit.</p>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:50px;text-align:right;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px;display:inline-block;min-width:200px;text-align:center">'+dirigeant+'<br>'+t.dir+' de '+nom+'<br><i>Signature</i></div></div>';
+      openDocWindow('Attestation sur l\'honneur — '+nom,body);
+      break;
+    }
+    case 'decision_unique':{
+      const body=docHeader('DECISION DE L\'ASSOCIE UNIQUE','Exercice clos le 31/12/'+exercice,false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px">L\'an <b>'+new Date().getFullYear()+'</b>, le <b>'+d+'</b>,</p>'
+      +'<p style="margin-bottom:14px"><b>'+dirigeant+'</b>, associe unique de la societe <b>'+nom+'</b>, '+type+' au capital de <b>'+fmt(capital)+'</b>, dont le siege social est situe au <b>'+adresse+'</b>, immatriculee au RCS sous le numero SIREN <b>'+siren+'</b>,</p>'
+      +'<p style="margin-bottom:14px">a pris, en sa qualite d\'associe unique, les decisions suivantes, conformement aux dispositions de l\'article L. 227-9 du Code de Commerce :</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Premiere decision — Approbation des comptes</div>'
+      +'<p style="margin-bottom:10px">L\'associe unique approuve les comptes de l\'exercice clos le 31 decembre '+exercice+' tels qu\'ils ont ete etablis par le '+t.dir+', a savoir :</p>'
+      +'<table><tr><td style="padding:8px 12px;font-weight:700">Chiffre d\'affaires</td><td style="padding:8px 12px;text-align:right;font-weight:700">'+ca+'</td></tr>'
+      +'<tr><td style="padding:8px 12px;font-weight:700">Resultat de l\'exercice</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:'+(resultatNum>=0?'#0A6847':'#DC3545')+'">'+resultat+'</td></tr></table>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Deuxieme decision — Affectation du resultat</div>'
+      +(resultatNum>=0
+        ?'<p style="margin-bottom:10px">L\'associe unique decide d\'affecter le benefice de l\'exercice s\'elevant a <b>'+resultat+'</b> de la maniere suivante :</p>'
+        +'<table><tr><td style="padding:8px 12px">Reserve legale (5%)</td><td style="padding:8px 12px;text-align:right;font-weight:600">'+reserveLegale+'</td></tr>'
+        +'<tr><td style="padding:8px 12px">Report a nouveau</td><td style="padding:8px 12px;text-align:right;font-weight:600">'+reportNouveau+'</td></tr></table>'
+        :'<p style="margin-bottom:10px">L\'associe unique constate que l\'exercice se solde par une perte de <b>'+resultat+'</b> et decide de reporter cette perte au compte « Report a nouveau debiteur ».</p>'
+      )
+      +'</div>'
+      +'<div class="section"><div class="section-title">Troisieme decision — Quitus</div>'
+      +'<p style="margin-bottom:10px">L\'associe unique donne quitus entier et sans reserve au '+t.dir+' de sa gestion au cours de l\'exercice ecoule.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Depot</div>'
+      +'<p style="margin-bottom:10px">Le present proces-verbal sera depose au greffe du tribunal de commerce dans le mois suivant l\'approbation des comptes.</p>'
+      +'<p style="margin-bottom:6px">Fait a '+adresse.split(',').pop().trim()+', le '+d+'</p>'
+      +'</div>'
+      +'<div style="margin-top:40px;text-align:right;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px;display:inline-block;min-width:200px;text-align:center">'+dirigeant+'<br>Associe unique<br><i>Signature</i></div></div>';
+      openDocWindow('Decision Associe Unique — '+nom,body);
+      break;
+    }
+    case 'prestation':{
+      const body=docHeader('CONTRAT DE PRESTATION DE SERVICES','Entre les parties ci-dessous designees',false)
+      +'<div class="section">'
+      +'<p style="margin-bottom:14px;font-size:12px;font-weight:700;text-transform:uppercase;color:#0A6847">ENTRE LES SOUSSIGNES :</p>'
+      +'<div style="margin-bottom:14px;padding:12px 16px;background:#F0F5F2;border-radius:6px">'
+      +'<p><b>Le Prestataire :</b></p>'
+      +'<p>La societe <b>'+nom+'</b>, '+type+' au capital de '+fmt(capital)+'</p>'
+      +'<p>Siege social : '+adresse+'</p>'
+      +'<p>SIREN : '+siren+'</p>'
+      +'<p>Representee par <b>'+dirigeant+'</b>, en qualite de '+t.dir+'</p>'
+      +'</div>'
+      +'<div style="margin-bottom:14px;padding:12px 16px;background:#FEF3C7;border-radius:6px">'
+      +'<p><b>Le Client :</b></p>'
+      +'<p style="color:#DC3545">[NOM / RAISON SOCIALE DU CLIENT]</p>'
+      +'<p style="color:#DC3545">[ADRESSE DU CLIENT]</p>'
+      +'<p style="color:#DC3545">[SIREN DU CLIENT]</p>'
+      +'<p style="color:#DC3545">[REPRESENTANT DU CLIENT]</p>'
+      +'</div>'
+      +'<p style="margin-bottom:6px">Ci-apres designees ensemble « les Parties ».</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 1 — Objet du contrat</div>'
+      +'<p style="margin-bottom:10px">Le Prestataire s\'engage a realiser pour le compte du Client les prestations suivantes :</p>'
+      +'<div style="margin:10px 0;padding:12px 16px;background:#F9FAFB;border-left:3px solid #0A6847;border-radius:0 6px 6px 0;min-height:40px"><p style="color:#DC3545">[DESCRIPTION DETAILLEE DES PRESTATIONS]</p></div>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 2 — Duree</div>'
+      +'<p style="margin-bottom:10px">Le present contrat est conclu pour une duree de <span style="color:#DC3545"><b>[DUREE]</b></span> a compter du <span style="color:#DC3545"><b>[DATE DE DEBUT]</b></span>.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 3 — Prix et modalites de paiement</div>'
+      +'<p style="margin-bottom:10px">En contrepartie des prestations realisees, le Client versera au Prestataire la somme de <span style="color:#DC3545"><b>[MONTANT HT]</b></span> HT, soit <span style="color:#DC3545"><b>[MONTANT TTC]</b></span> TTC.</p>'
+      +'<p style="margin-bottom:10px">Le paiement sera effectue par virement bancaire sous 30 jours a compter de la reception de la facture.</p>'
+      +'<p style="margin-bottom:10px">Tout retard de paiement entrainera l\'application de penalites de retard au taux prevu par l\'article L. 441-10 du Code de Commerce, ainsi qu\'une indemnite forfaitaire pour frais de recouvrement de 40 euros.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 4 — Obligations du prestataire</div>'
+      +'<p style="margin-bottom:10px">Le Prestataire s\'engage a executer les prestations avec diligence et professionnalisme, dans le respect des regles de l\'art applicables a son domaine d\'activite.</p>'
+      +'<p style="margin-bottom:10px">Le Prestataire agit en qualite de professionnel independant et conserve l\'entiere liberte dans l\'organisation et l\'execution de ses prestations.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 5 — Confidentialite</div>'
+      +'<p style="margin-bottom:10px">Chacune des Parties s\'engage a ne pas divulguer les informations confidentielles recues de l\'autre Partie dans le cadre de l\'execution du present contrat, pendant toute la duree du contrat et pendant une duree de 2 ans apres son terme.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 6 — Responsabilite</div>'
+      +'<p style="margin-bottom:10px">La responsabilite du Prestataire est limitee au montant des sommes effectivement percues au titre du present contrat. Le Prestataire ne saurait etre tenu responsable des dommages indirects.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 7 — Resiliation</div>'
+      +'<p style="margin-bottom:10px">Chacune des Parties pourra resilier le present contrat par lettre recommandee avec accuse de reception, moyennant un preavis de <span style="color:#DC3545"><b>[DUREE PREAVIS]</b></span>.</p>'
+      +'<p style="margin-bottom:10px">En cas de manquement grave de l\'une des Parties a ses obligations, l\'autre Partie pourra resilier le contrat de plein droit, 15 jours apres mise en demeure restee sans effet.</p>'
+      +'</div>'
+      +'<div class="section"><div class="section-title">Article 8 — Droit applicable et litiges</div>'
+      +'<p style="margin-bottom:10px">Le present contrat est soumis au droit francais. En cas de litige, les Parties s\'efforceront de trouver une solution amiable. A defaut, le litige sera soumis aux tribunaux competents.</p>'
+      +'</div>'
+      +'<div style="margin-top:10px"><p style="margin-bottom:6px">Fait en deux exemplaires originaux, a '+adresse.split(',').pop().trim()+', le '+d+'</p></div>'
+      +'<div style="margin-top:40px;display:flex;justify-content:space-between">'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Le Prestataire<br><b>'+dirigeant+'</b><br>'+nom+'<br><i>Signature + mention « Lu et approuve »</i></div></div>'
+      +'<div style="text-align:center;min-width:200px"><div style="border-top:1px solid #ccc;padding-top:8px;font-size:11px">Le Client<br><b>[NOM]</b><br>[SOCIETE]<br><i>Signature + mention « Lu et approuve »</i></div></div>'
+      +'</div>';
+      openDocWindow('Contrat de prestation — '+nom,body);
+      break;
+    }
+  }
+};
+
 function renderCreation(el){
   const s=creaData.step||0;
 
@@ -4044,6 +4348,240 @@ function renderComparaison(){
   </div>`;
 }
 
+// ============ SIMULATEUR EMBAUCHE ============
+function renderEmbauche(el){
+  var tab=window._embTab||'detail';
+  var brutM=window._embBrut||3000;
+  var tjm=window._embTJM||500;
+  var coefInt=window._embCoef||2.0;
+  var dureeStage=window._embDureeStage||3;
+
+  function calcChargesPatronales(brut){
+    var maladie=brut*0.07;
+    var vieillesseP=brut*0.0855;
+    var vieillesseD=brut*0.0202;
+    var famille=brut*0.0345;
+    var chomage=brut*0.0405;
+    var at=brut*0.02;
+    var fnal=brut*0.005;
+    var formation=brut*0.01;
+    var agff=brut*0.012;
+    var csa=brut*0.003;
+    var total=maladie+vieillesseP+vieillesseD+famille+chomage+at+fnal+formation+agff+csa;
+    return {maladie:maladie,vieillesseP:vieillesseP,vieillesseD:vieillesseD,famille:famille,chomage:chomage,at:at,fnal:fnal,formation:formation,agff:agff,csa:csa,total:total};
+  }
+
+  function calcChargesSalariales(brut){
+    var maladie=brut*0.004;
+    var vieillesseP=brut*0.0690;
+    var vieillesseD=brut*0.004;
+    var chomage=0;
+    var retraiteC=brut*0.0324;
+    var csg=brut*0.9825*0.0980;
+    var total=maladie+vieillesseP+vieillesseD+chomage+retraiteC+csg;
+    return {total:total};
+  }
+
+  function calcStatut(statut,brutMensuel,tjmVal,coef,dureeS){
+    var result={label:'',brutM:0,chargesP:{total:0},coutM:0,netM:0,coutAnnuel:0,aides:0,coutFinal:0,details:[]};
+    var cp,cs;
+    if(statut==='cdi'){
+      result.label='CDI (salarie classique)';
+      result.brutM=brutMensuel;
+      cp=calcChargesPatronales(brutMensuel);
+      cs=calcChargesSalariales(brutMensuel);
+      result.chargesP=cp;
+      result.coutM=brutMensuel+cp.total;
+      result.netM=brutMensuel-cs.total;
+      result.coutAnnuel=result.coutM*13;
+      result.aides=0;
+      result.coutFinal=result.coutAnnuel;
+      result.details=[
+        {l:'Maladie (7%)',v:cp.maladie},{l:'Vieillesse plafonnee (8.55%)',v:cp.vieillesseP},
+        {l:'Vieillesse deplafonnee (2.02%)',v:cp.vieillesseD},{l:'Famille (3.45%)',v:cp.famille},
+        {l:'Chomage (4.05%)',v:cp.chomage},{l:'AT/MP (~2%)',v:cp.at},
+        {l:'FNAL (0.5%)',v:cp.fnal},{l:'Formation (1%)',v:cp.formation},
+        {l:'AGFF (1.2%)',v:cp.agff},{l:'CSA (0.3%)',v:cp.csa}
+      ];
+    }else if(statut==='cdd'){
+      result.label='CDD (+prime precarite 10%)';
+      result.brutM=brutMensuel;
+      cp=calcChargesPatronales(brutMensuel);
+      cs=calcChargesSalariales(brutMensuel);
+      result.chargesP=cp;
+      result.coutM=brutMensuel+cp.total;
+      result.netM=brutMensuel-cs.total;
+      var precarite=brutMensuel*12*0.10;
+      result.coutAnnuel=result.coutM*12+precarite;
+      result.aides=0;
+      result.coutFinal=result.coutAnnuel;
+      result.details=[
+        {l:'Maladie (7%)',v:cp.maladie},{l:'Vieillesse plafonnee (8.55%)',v:cp.vieillesseP},
+        {l:'Vieillesse deplafonnee (2.02%)',v:cp.vieillesseD},{l:'Famille (3.45%)',v:cp.famille},
+        {l:'Chomage (4.05%)',v:cp.chomage},{l:'AT/MP (~2%)',v:cp.at},
+        {l:'FNAL (0.5%)',v:cp.fnal},{l:'Formation (1%)',v:cp.formation},
+        {l:'AGFF (1.2%)',v:cp.agff},{l:'CSA (0.3%)',v:cp.csa},
+        {l:'Prime precarite (10% brut annuel)',v:precarite}
+      ];
+    }else if(statut==='apprenti'){
+      result.label='Apprenti (< 26 ans, aide 5000 EUR)';
+      var brutApp=brutMensuel*0.60;
+      result.brutM=brutApp;
+      cp=calcChargesPatronales(brutApp);
+      cs=calcChargesSalariales(brutApp);
+      result.chargesP=cp;
+      result.coutM=brutApp+cp.total;
+      result.netM=brutApp;
+      result.coutAnnuel=result.coutM*12;
+      result.aides=5000;
+      result.coutFinal=result.coutAnnuel-result.aides;
+      result.details=[
+        {l:'Base: 60% du brut saisi',v:brutApp},
+        {l:'Charges patronales',v:cp.total},
+        {l:'Aide a l\'embauche (1ere annee)',v:-5000}
+      ];
+    }else if(statut==='stagiaire'){
+      result.label='Stagiaire (gratification min si > 2 mois)';
+      var gratifH=4.35;
+      var hParMois=151.67;
+      var gratifM=dureeS>2?gratifH*hParMois:0;
+      result.brutM=gratifM;
+      result.chargesP={total:0};
+      result.coutM=gratifM;
+      result.netM=gratifM;
+      result.coutAnnuel=gratifM*dureeS;
+      result.aides=0;
+      result.coutFinal=result.coutAnnuel;
+      result.details=[
+        {l:'Gratification min (4.35 EUR/h)',v:gratifH},
+        {l:'Heures/mois (151.67h)',v:hParMois},
+        {l:'Gratification mensuelle',v:gratifM},
+        {l:'Duree: '+dureeS+' mois',v:0},
+        {l:'Pas de charges patronales',v:0}
+      ];
+    }else if(statut==='interim'){
+      result.label='Interim (coeff. x'+coef.toFixed(1)+')';
+      result.brutM=brutMensuel;
+      result.coutM=brutMensuel*coef;
+      result.chargesP={total:brutMensuel*(coef-1)};
+      result.netM=brutMensuel-calcChargesSalariales(brutMensuel).total;
+      result.coutAnnuel=result.coutM*12;
+      result.aides=0;
+      result.coutFinal=result.coutAnnuel;
+      result.details=[
+        {l:'Salaire brut equivalent',v:brutMensuel},
+        {l:'Coefficient agence (x'+coef.toFixed(1)+')',v:0},
+        {l:'Cout agence/mois',v:result.coutM},
+        {l:'Inclut: charges, gestion, marge agence',v:0}
+      ];
+    }else if(statut==='freelance'){
+      result.label='Independant / Freelance (TJM)';
+      var joursParMois=20;
+      var coutMFreel=tjmVal*joursParMois;
+      result.brutM=coutMFreel;
+      result.chargesP={total:0};
+      result.coutM=coutMFreel;
+      result.netM=coutMFreel;
+      result.coutAnnuel=coutMFreel*12;
+      result.aides=0;
+      result.coutFinal=result.coutAnnuel;
+      result.details=[
+        {l:'TJM',v:tjmVal},
+        {l:'Jours/mois (20j)',v:joursParMois},
+        {l:'Cout mensuel',v:coutMFreel},
+        {l:'Pas de charges patronales',v:0},
+        {l:'Pas de conges payes',v:0}
+      ];
+    }
+    return result;
+  }
+
+  function renderDetail(statut){
+    var r=calcStatut(statut,brutM,tjm,coefInt,dureeStage);
+    var detailsHTML=r.details.map(function(d){
+      return '<tr><td style="font-size:12px">'+d.l+'</td><td style="font-size:12px;text-align:right;font-weight:600">'+(d.v!==0?fmt(d.v):'-')+'</td></tr>';
+    }).join('');
+    return '<div class="cd" style="border-left:3px solid var(--acc)">'
+      +'<div class="cd-t">'+r.label+'</div>'
+      +'<div class="gr g4" style="margin-bottom:14px">'
+      +'<div class="kpi"><div class="kpi-v" style="color:var(--acc)">'+fmt(r.coutM)+'</div><div class="kpi-l">Cout employeur/mois</div></div>'
+      +'<div class="kpi"><div class="kpi-v" style="color:var(--blu)">'+fmt(r.netM)+'</div><div class="kpi-l">Net salarie/mois</div></div>'
+      +'<div class="kpi"><div class="kpi-v" style="color:var(--org)">'+fmt(r.coutAnnuel)+'</div><div class="kpi-l">Cout annuel total</div></div>'
+      +'<div class="kpi"><div class="kpi-v" style="color:var(--grn2)">'+fmt(r.coutFinal)+'</div><div class="kpi-l">Cout final (aides deduites)</div></div>'
+      +'</div>'
+      +(r.aides>0?'<div class="al al-s" style="margin-bottom:10px"><span>✅</span><span>Aide deduite : <b>'+fmt(r.aides)+'</b></span></div>':'')
+      +'<table><thead><tr><th>Detail charges patronales</th><th style="text-align:right">Montant/mois</th></tr></thead><tbody>'
+      +detailsHTML
+      +'<tr style="font-weight:700;background:var(--bg3)"><td>TOTAL charges patronales</td><td style="text-align:right">'+fmt(r.chargesP.total)+'</td></tr>'
+      +'</tbody></table></div>';
+  }
+
+  function renderCompare(){
+    var statuts=['cdi','cdd','apprenti','stagiaire','interim','freelance'];
+    var results=statuts.map(function(s){return calcStatut(s,brutM,tjm,coefInt,dureeStage);});
+    var rows='';
+    results.forEach(function(r){
+      rows+='<tr>'
+        +'<td style="font-weight:700">'+r.label+'</td>'
+        +'<td style="text-align:right">'+fmt(r.brutM)+'</td>'
+        +'<td style="text-align:right">'+fmt(r.chargesP.total)+'</td>'
+        +'<td style="text-align:right;font-weight:700;color:var(--acc)">'+fmt(r.coutM)+'</td>'
+        +'<td style="text-align:right;color:var(--blu)">'+fmt(r.netM)+'</td>'
+        +'<td style="text-align:right;color:var(--org)">'+fmt(r.coutAnnuel)+'</td>'
+        +'<td style="text-align:right">'+(r.aides>0?'<span class="tg t-grn">-'+fmt(r.aides)+'</span>':'-')+'</td>'
+        +'<td style="text-align:right;font-weight:800;color:var(--grn2)">'+fmt(r.coutFinal)+'</td>'
+        +'</tr>';
+    });
+    return '<div class="cd" style="overflow-x:auto">'
+      +'<div class="cd-t">Comparaison tous statuts — Brut mensuel : '+fmt(brutM)+' / TJM : '+fmt(tjm)+'</div>'
+      +'<table><thead><tr><th>Statut</th><th style="text-align:right">Brut/mois</th><th style="text-align:right">Charges pat./mois</th><th style="text-align:right">Cout empl./mois</th><th style="text-align:right">Net salarie/mois</th><th style="text-align:right">Cout annuel</th><th style="text-align:right">Aides</th><th style="text-align:right">Cout final/an</th></tr></thead><tbody>'
+      +rows
+      +'</tbody></table></div>';
+  }
+
+  var inputsHTML='<div class="cd"><div class="cd-t">Parametres de simulation</div>'
+    +'<div class="gr g2">'
+    +'<div class="fg"><label>Salaire brut mensuel (EUR)</label>'
+    +'<input class="inp" type="number" id="embBrut" value="'+brutM+'" oninput="window._embBrut=+this.value;window.updateEmbauche()">'
+    +'</div>'
+    +'<div class="fg"><label>TJM Freelance (EUR)</label>'
+    +'<input class="inp" type="number" id="embTJM" value="'+tjm+'" oninput="window._embTJM=+this.value;window.updateEmbauche()">'
+    +'</div>'
+    +'<div class="fg"><label>Coefficient interim (1.8 a 2.2)</label>'
+    +'<input class="inp" type="number" id="embCoef" value="'+coefInt+'" min="1.8" max="2.2" step="0.1" oninput="window._embCoef=+this.value;window.updateEmbauche()">'
+    +'</div>'
+    +'<div class="fg"><label>Duree stage (mois)</label>'
+    +'<input class="inp" type="number" id="embDureeStage" value="'+dureeStage+'" min="1" max="6" oninput="window._embDureeStage=+this.value;window.updateEmbauche()">'
+    +'</div>'
+    +'</div></div>';
+
+  var contentHTML='';
+  if(tab==='compare'){
+    contentHTML=renderCompare();
+  }else{
+    contentHTML=renderDetail('cdi')
+      +renderDetail('cdd')
+      +renderDetail('apprenti')
+      +renderDetail('stagiaire')
+      +renderDetail('interim')
+      +renderDetail('freelance');
+  }
+
+  el.innerHTML='<div class="top"><div><h2>👥 Simulateur embauche</h2><div class="top-s">Calculez le cout reel d\'une embauche selon le statut</div></div></div>'
+    +'<div class="tabs" style="margin-bottom:20px">'
+    +'<div class="tab '+(tab==='detail'?'on':'')+'" onclick="window._embTab=\'detail\';window.updateEmbauche()">📋 Detail par statut</div>'
+    +'<div class="tab '+(tab==='compare'?'on':'')+'" onclick="window._embTab=\'compare\';window.updateEmbauche()">⚖️ Comparaison</div>'
+    +'</div>'
+    +inputsHTML
+    +contentHTML
+    +'<div class="al al-i" style="margin-top:12px"><span>ℹ️</span><span>Les taux sont indicatifs (base 2025/2026). Les charges patronales varient selon la taille de l\'entreprise, le secteur et la convention collective. Consultez votre expert-comptable pour un chiffrage precis.</span></div>';
+}
+
+window.updateEmbauche=function(){
+  var pg=document.getElementById('page');
+  if(pg) renderEmbauche(pg);
+};
+
 // ============ MODE URGENCE ============
 function renderUrgence(el){
   el.innerHTML=`
@@ -4164,7 +4702,9 @@ render=function(){
       ${navItem('simul','📊','Simulateurs')}
       ${navItem('statuts','📜','Statuts & Docs')}
       ${navItem('settings','⚙️','Parametres')}
+      ${navItem('juridique','⚖️','Documents juridiques')}
       ${navItem('creation','🚀','Creer sa societe')}
+      ${navItem('embauche','👥','Simulateur embauche')}
       ${navItem('urgence','🆘','Mode Urgence')}
     </nav>
     <div class="side-foot">FiscaPro v3.0 — 2025/2026<br>⚠️ Ne remplace pas un expert-comptable</div>
@@ -4198,7 +4738,9 @@ renderPage=function(){
     case'import':renderImportBancaire(pg);break;
     case'frais':renderFrais(pg);break;
     case'creation':renderCreation(pg);break;
+    case'juridique':renderJuridique(pg);break;
     case'urgence':renderUrgence(pg);break;
+    case'embauche':renderEmbauche(pg);break;
   }
 };
 
