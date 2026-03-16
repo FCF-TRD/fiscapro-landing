@@ -3735,8 +3735,182 @@ function renderDemarches(el){
   </div>`;
 }
 
-// ============ GUIDE CREATION ENTREPRISE ============
+// ============ CREATION ENTREPRISE — WIZARD COMPLET ============
+let creaData=load('creaData',{step:0,nbAssocies:'1',activite:'services',ca_prevu:'',protection:'maximum',nom:'',prenom:'',dateNaissance:'',adresse:'',denomination:'',objet:'',siege:'',capital:200,apeDesc:''});
+function saveCrea(){save('creaData',creaData);}
+
 function renderCreation(el){
+  const s=creaData.step||0;
+
+  // Auto-recommend based on answers
+  let reco='SASU';let recoWhy='';
+  if(creaData.nbAssocies==='1'){
+    if(creaData.protection==='maximum'){reco='SASU';recoWhy='Seul + protection maximale = SASU. Assimile salarie, dividendes sans charges sociales.';}
+    else{reco='EURL';recoWhy='Seul + charges minimales = EURL. TNS (~45% de charges au lieu de ~65%). Attention aux dividendes charges au-dela de 10% du capital.';}
+  }else{
+    if(creaData.protection==='maximum'){reco='SAS';recoWhy='Plusieurs associes + flexibilite = SAS. Statuts libres, pas de plafond de remuneration.';}
+    else{reco='SARL';recoWhy='Plusieurs associes + cadre structure = SARL. Plus rigide mais bien connue des banques.';}
+  }
+  let recoRegime=reco==='EURL'&&creaData.ca_prevu&&+creaData.ca_prevu<30000?'ir':'is';
+  let recoTVA=creaData.activite==='formation'?'exoneree':(creaData.ca_prevu&&+creaData.ca_prevu<36800?'franchise':'reel_simplifie');
+
+  const steps=[
+    // Step 0: Questionnaire
+    ()=>`<div class="cd-t">Dis-nous en plus sur ton projet</div>
+    <div class="fg"><label>Tu te lances seul ou a plusieurs ?</label>
+      <div class="gr g2" style="gap:8px">${[{v:'1',l:'Seul',e:'👤'},{v:'2+',l:'A plusieurs',e:'👥'}].map(o=>
+        `<div class="tc ${creaData.nbAssocies===o.v?'sel':''}" onclick="creaData.nbAssocies='${o.v}';saveCrea();renderPage()"><div class="em">${o.e}</div><div class="nm">${o.l}</div></div>`).join('')}
+      </div></div>
+    <div class="fg"><label>Type d'activite</label>
+      <select class="inp" onchange="creaData.activite=this.value;saveCrea();renderPage()">
+        ${[{v:'services',l:'Prestations de services'},{v:'ventes',l:'Vente de marchandises'},{v:'liberal',l:'Profession liberale'},{v:'formation',l:'Formation professionnelle'},{v:'btp',l:'BTP / Artisanat'},{v:'restauration',l:'Restauration'},{v:'transport',l:'Transport'},{v:'tech',l:'Tech / IT / Startup'}].map(o=>`<option value="${o.v}" ${creaData.activite===o.v?'selected':''}>${o.l}</option>`).join('')}
+      </select></div>
+    <div class="fg"><label>CA previsionnel annuel</label><input class="inp" type="number" placeholder="Ex: 50000" value="${creaData.ca_prevu}" onchange="creaData.ca_prevu=this.value;saveCrea();renderPage()"></div>
+    <div class="fg"><label>Ce qui compte le plus pour toi</label>
+      <div class="gr g2" style="gap:8px">${[{v:'maximum',l:'Protection sociale max',d:'Chomage, maladie, retraite'},{v:'minimal',l:'Charges minimales',d:'Payer le moins possible'}].map(o=>
+        `<div class="tc ${creaData.protection===o.v?'sel':''}" onclick="creaData.protection='${o.v}';saveCrea();renderPage()"><div class="nm">${o.l}</div><div class="ds">${o.d}</div></div>`).join('')}
+      </div></div>`,
+
+    // Step 1: Recommendation
+    ()=>`<div class="cd" style="border-left:3px solid var(--acc);background:linear-gradient(135deg,var(--bg2),rgba(10,104,71,.03));padding:20px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);font-weight:700">Notre recommandation</div>
+      <div style="font-size:28px;font-weight:900;color:var(--acc);margin-top:4px">${TYPES[reco].em} ${reco}</div>
+      <div style="font-size:14px;font-weight:600;margin-top:4px">${TYPES[reco].f}</div>
+      <div style="font-size:12px;color:var(--tx2);margin-top:8px;line-height:1.7">${recoWhy}</div>
+      <div style="display:flex;gap:12px;margin-top:12px;flex-wrap:wrap">
+        <div style="padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:11px"><b>Regime :</b> ${recoRegime==='is'?'IS':'IR'}</div>
+        <div style="padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:11px"><b>TVA :</b> ${{franchise:'Franchise',exoneree:'Exoneree',reel_simplifie:'Reel simplifie'}[recoTVA]}</div>
+        <div style="padding:6px 10px;background:var(--bg3);border-radius:6px;font-size:11px"><b>Social :</b> ${TYPES[reco].social}</div>
+      </div>
+    </div>
+    <div class="al al-i" style="margin-top:12px"><span>💬</span><span>Pas convaincu ? <a href="#" onclick="goTo('assistant');return false" style="color:var(--acc);font-weight:600">Demande a l'Expert IA</a> de comparer les options pour ta situation precise.</span></div>`,
+
+    // Step 2: Infos fondateur
+    ()=>`<div class="cd-t">Informations du fondateur</div>
+    <div class="gr g2"><div class="fg"><label>Prenom</label><input class="inp" value="${creaData.prenom}" onchange="creaData.prenom=this.value;saveCrea()"></div>
+    <div class="fg"><label>Nom</label><input class="inp" value="${creaData.nom}" onchange="creaData.nom=this.value;saveCrea()"></div></div>
+    <div class="fg"><label>Date de naissance</label><input class="inp" type="date" value="${creaData.dateNaissance}" onchange="creaData.dateNaissance=this.value;saveCrea()"></div>
+    <div class="fg"><label>Adresse personnelle</label><input class="inp" value="${creaData.adresse}" onchange="creaData.adresse=this.value;saveCrea()"></div>`,
+
+    // Step 3: Infos societe
+    ()=>`<div class="cd-t">Informations de la societe</div>
+    <div class="fg"><label>Denomination sociale</label><input class="inp" value="${creaData.denomination}" placeholder="Ex: FRENCH CENTER" onchange="creaData.denomination=this.value;saveCrea()"></div>
+    <div class="fg"><label>Objet social (description de l'activite)</label><textarea class="inp" rows="3" placeholder="La societe a pour objet : la formation professionnelle continue..." onchange="creaData.objet=this.value;saveCrea()">${creaData.objet}</textarea></div>
+    <div class="fg"><label>Siege social (adresse)</label><input class="inp" value="${creaData.siege||creaData.adresse}" onchange="creaData.siege=this.value;saveCrea()"></div>
+    <div class="gr g2">
+      <div class="fg"><label>Capital social (€)</label><input class="inp" type="number" value="${creaData.capital}" onchange="creaData.capital=+this.value;saveCrea()">
+      <div style="font-size:10px;color:var(--tx3);margin-top:2px">Minimum legal : 1€. Recommande : 200-1000€</div></div>
+      <div class="fg"><label>Nombre d'actions/parts</label><input class="inp" type="number" value="${creaData.capital}" disabled>
+      <div style="font-size:10px;color:var(--tx3);margin-top:2px">1€ par action/part</div></div>
+    </div>`,
+
+    // Step 4: Generation
+    ()=>`<div class="cd" style="text-align:center;padding:24px">
+      <div style="font-size:48px;margin-bottom:12px">🎉</div>
+      <div style="font-size:18px;font-weight:800;margin-bottom:8px">Tes documents sont prets !</div>
+      <div style="font-size:13px;color:var(--tx3);margin-bottom:20px">Clique pour generer chaque document</div>
+      <div style="display:grid;gap:8px;max-width:400px;margin:0 auto">
+        <button class="bt bt-p" onclick="genStatuts('${reco}')" style="justify-content:center">📜 Generer les statuts ${reco}</button>
+        <button class="bt bt-s" onclick="genAnnonceLegale('${reco}')" style="justify-content:center">📰 Generer l'annonce legale</button>
+        <button class="bt bt-s" onclick="window.open('https://formalites.entreprises.gouv.fr','_blank')" style="justify-content:center">🏛️ Aller sur le Guichet unique INPI</button>
+      </div>
+      <div class="al al-s" style="margin-top:16px"><span>💡</span><span>Apres immatriculation, reviens ici et entre ton SIREN pour tout configurer automatiquement.</span></div>
+    </div>`
+  ];
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🚀 Creer ta societe</h2><div class="top-s">Assistant de creation — statuts, regime, documents</div></div></div>
+
+  <div class="wsteps" style="margin-bottom:20px">${[0,1,2,3,4].map(i=>`<div class="wstep ${i<s?'done':''} ${i===s?'cur':''}" style="cursor:pointer" onclick="creaData.step=${i};saveCrea();renderPage()"></div>`).join('')}</div>
+  <div style="font-size:11px;color:var(--tx3);text-align:center;margin:-14px 0 16px">${['Ton projet','Recommandation','Toi','Ta societe','Documents'][s]}</div>
+
+  <div class="cd">${steps[s]()}</div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:16px">
+    ${s>0?`<button class="bt bt-s" onclick="creaData.step=${s-1};saveCrea();renderPage()">← Retour</button>`:'<div></div>'}
+    ${s<4?`<button class="bt bt-p" onclick="creaData.step=${s+1};saveCrea();renderPage()">Suivant →</button>`:''}
+  </div>`;
+}
+
+// Generate statuts
+window.genStatuts=function(forme){
+  const d=creaData;const t=TYPES[forme]||TYPES.SASU;
+  const nbActions=d.capital||200;const valNom=1;
+  const isUnipersonnelle=forme==='SASU'||forme==='EURL';
+  const partLabel=forme==='SARL'||forme==='EURL'?'parts sociales':'actions';
+
+  const h=docHeader('STATUTS','${t.f}',false)
+  .replace('STATUTS',d.denomination?'STATUTS DE '+d.denomination.toUpperCase():'STATUTS')
+  +`<div style="text-align:center;margin:20px 0;font-size:16px;font-weight:800;color:var(--acc)">« ${d.denomination||'[DENOMINATION]'} »</div>
+  <div style="text-align:center;font-size:13px;color:var(--tx2);margin-bottom:20px">${t.f}<br>Au capital de ${(d.capital||200).toLocaleString('fr-FR')} euros</div>
+
+  <div class="section"><div class="section-title">Article 1 — Forme</div>
+  <div class="legal-text">Il est constitue par ${isUnipersonnelle?'l\'associe unique':'les associes'} une ${t.f.toLowerCase()} regie par les dispositions legislatives et reglementaires en vigueur, ainsi que par les presents statuts.</div></div>
+
+  <div class="section"><div class="section-title">Article 2 — Objet social</div>
+  <div class="legal-text">La societe a pour objet, en France et a l'etranger :<br>${d.objet||'[A COMPLETER]'}<br><br>Et plus generalement, toutes operations industrielles, commerciales, financieres, mobilieres ou immobilieres se rattachant directement ou indirectement a l'objet social.</div></div>
+
+  <div class="section"><div class="section-title">Article 3 — Denomination sociale</div>
+  <div class="legal-text">La denomination sociale est : <b>${d.denomination||'[DENOMINATION]'}</b><br><br>Dans tous les actes et documents emanant de la societe, la denomination sera precedee ou suivie des mots "${t.f}" ou du sigle "${forme}" et de l'enonciation du capital social.</div></div>
+
+  <div class="section"><div class="section-title">Article 4 — Siege social</div>
+  <div class="legal-text">Le siege social est fixe a : <b>${d.siege||d.adresse||'[ADRESSE]'}</b><br><br>Il peut etre transfere en tout endroit par decision ${isUnipersonnelle?'de l\'associe unique':'collective des associes'}.</div></div>
+
+  <div class="section"><div class="section-title">Article 5 — Duree</div>
+  <div class="legal-text">La duree de la societe est fixee a <b>99 annees</b> a compter de la date de son immatriculation au Registre du commerce et des societes, sauf dissolution anticipee ou prorogation.</div></div>
+
+  <div class="section"><div class="section-title">Article 6 — Apports et capital social</div>
+  <div class="legal-text">${isUnipersonnelle?'L\'associe unique soussigne apporte':'Les associes soussignes apportent'} a la societe une somme en numeraire de <b>${(d.capital||200).toLocaleString('fr-FR')} euros</b> (${d.capital||200} euros), correspondant a <b>${nbActions} ${partLabel}</b> d'une valeur nominale de ${valNom} euro chacune, entierement souscrites et liberees a hauteur de 50%.<br><br>
+  Le capital social est fixe a la somme de <b>${(d.capital||200).toLocaleString('fr-FR')} euros</b>, divise en ${nbActions} ${partLabel} de ${valNom} euro de valeur nominale chacune, attribuees a :<br><br>
+  <table><tr><td class="bold">${d.prenom||''} ${d.nom||''}</td><td class="right-align">${nbActions} ${partLabel}</td><td class="right-align">100%</td></tr></table></div></div>
+
+  <div class="section"><div class="section-title">Article 7 — ${t.dir}</div>
+  <div class="legal-text">Est nomme(e) en qualite de ${t.dir} pour une duree indeterminee :<br><br>
+  <b>${d.prenom||'[PRENOM]'} ${d.nom||'[NOM]'}</b>, ne(e) le ${d.dateNaissance?new Date(d.dateNaissance).toLocaleDateString('fr-FR'):'[DATE]'}, demeurant au ${d.adresse||'[ADRESSE]'}.<br><br>
+  Le ${t.dir} represente la societe a l'egard des tiers. Il dispose des pouvoirs les plus etendus pour agir en toute circonstance au nom de la societe.</div></div>
+
+  <div class="section"><div class="section-title">Article 8 — Exercice social</div>
+  <div class="legal-text">Chaque exercice social a une duree d'une annee, qui commence le <b>1er janvier</b> et finit le <b>31 decembre</b>.<br><br>Par exception, le premier exercice commencera le jour de l'immatriculation et se terminera le 31 decembre de l'annee en cours.</div></div>
+
+  <div class="section"><div class="section-title">Article 9 — Affectation du resultat</div>
+  <div class="legal-text">Sur le benefice de l'exercice diminue des pertes anterieures, il est preleve 5% pour constituer le fonds de reserve legale. Ce prelevement cesse d'etre obligatoire lorsque la reserve atteint le dixieme du capital social.<br><br>Le benefice distribuable est constitue par le benefice de l'exercice diminue des pertes anterieures et du prelevement pour la reserve legale, et augmente du report beneficiaire.<br><br>${isUnipersonnelle?'L\'associe unique decide':'L\'assemblee generale des associes decide'} de l'affectation du benefice distribuable.</div></div>
+
+  <div class="section"><div class="section-title">Article 10 — Dissolution</div>
+  <div class="legal-text">La societe est dissoute par l'arrivee du terme, sauf prorogation, ou par decision ${isUnipersonnelle?'de l\'associe unique':'des associes'}. La dissolution peut egalement resulter d'une decision judiciaire.</div></div>
+
+  <div style="margin-top:30px;font-size:13px;font-weight:700">Fait a ${(d.siege||d.adresse||'[VILLE]').split(/\d{5}/)[1]?.trim()||'[VILLE]'}, le ${new Date().toLocaleDateString('fr-FR')}</div>
+  <div class="signature-block"><div class="sig">${isUnipersonnelle?'L\'associe unique':'Les associes'}<br><br>${d.prenom||''} ${d.nom||''}<br><i>Precede de la mention "Lu et approuve"</i></div></div>`;
+
+  openDocWindow('Statuts '+d.denomination+' — '+forme,h);
+};
+
+// Generate annonce legale
+window.genAnnonceLegale=function(forme){
+  const d=creaData;const t=TYPES[forme]||TYPES.SASU;
+  const isUnipersonnelle=forme==='SASU'||forme==='EURL';
+
+  const h=docHeader('ANNONCE LEGALE — CONSTITUTION','A publier dans un Journal d\'Annonces Legales',false)
+  +`<div class="section"><div class="section-title">Avis de constitution</div>
+  <div class="legal-text" style="font-size:13px;line-height:2">
+  Par acte sous seing prive en date du <b>${new Date().toLocaleDateString('fr-FR')}</b>, il a ete constitue une societe presentant les caracteristiques suivantes :<br><br>
+  <b>Denomination sociale :</b> ${d.denomination||'[DENOMINATION]'}<br>
+  <b>Forme :</b> ${t.f}<br>
+  <b>Capital :</b> ${(d.capital||200).toLocaleString('fr-FR')} euros<br>
+  <b>Siege social :</b> ${d.siege||d.adresse||'[ADRESSE]'}<br>
+  <b>Objet :</b> ${(d.objet||'[OBJET SOCIAL]').substring(0,200)}<br>
+  <b>Duree :</b> 99 ans a compter de l'immatriculation<br>
+  <b>${t.dir} :</b> ${d.prenom||''} ${d.nom||''}, demeurant au ${d.adresse||'[ADRESSE]'}<br>
+  <b>Immatriculation :</b> RCS de ${(d.siege||'[VILLE]').split(/\d{5}/)[1]?.trim()||'[VILLE]'}<br><br>
+  Pour avis.
+  </div></div>
+
+  <div class="al al-i" style="margin-top:16px"><span>📰</span><span><b>Ou publier :</b> Copie ce texte et publie-le sur un site d'annonces legales agree (cout ~150-250€). <a href="https://annonces-legales.legalstart.fr" target="_blank" style="color:var(--acc)">Legalstart</a> | <a href="https://annonces-legales.lesechos.fr" target="_blank" style="color:var(--acc)">Les Echos</a></span></div>`;
+
+  openDocWindow('Annonce legale — '+d.denomination,h);
+};
+
+// Keep old guide as reference
+function renderCreation_old(el){
   const steps=[
     {num:'1',icon:'💡',titre:'Choisir la forme juridique',desc:'SASU, EURL, SAS, SARL, micro... Le bon choix depend de ta situation.',
       detail:'<b>Seul ?</b> SASU (assimile salarie, dividendes sans charges) ou EURL (TNS, moins cher en charges).<br><b>A plusieurs ?</b> SAS (flexible) ou SARL (cadre plus rigide mais connu).<br><b>Tester une idee ?</b> Micro-entreprise (0 frais, 5 min en ligne).<br><b>Immobilier ?</b> SCI.',
