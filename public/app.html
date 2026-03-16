@@ -4977,33 +4977,35 @@ render=function(){
     <nav class="nav">
       ${navItem('dashboard','📊','Dashboard')}
       ${navItem('assistant','💬','Mon Expert IA')}
-      <div class="nav-s">Mon business</div>
+      <div class="nav-s">Comptabilite</div>
       ${navItem('ecritures','📄','Ecritures')}
       ${navItem('facturation','🧾','Factures & Devis')}
-      ${navItem('paie','💰','Paie & salaires')}
       ${navItem('import','📥','Import bancaire')}
-      ${navItem('frais','🚗','Notes de frais')}
-      <div class="nav-s">Pilotage</div>
       ${navItem('bilan','📋','Bilan')}
-      ${navItem('previsionnel','📈','Previsionnel')}
+      <div class="nav-s">Gestion</div>
+      ${navItem('paie','💰','Paie')}
+      ${navItem('frais','🚗','Notes de frais')}
+      ${navItem('relances','📨','Relances')}
       ${navItem('opti','⭐','Optimisation')}
-      ${navItem('aides','🎁','Aides & Subventions')}
-      ${navItem('relances','📨','Relances impayes')}
-      <div class="nav-s">Fiscal</div>
+      <div class="nav-s">Fiscal & juridique</div>
       ${navItem('echeancier','📅','Echeancier')}
       ${navItem('declarations','🏛️','Declarations')}
-      ${navItem('demarches','📋','Demarches admin')}
-      <div class="nav-s">Plus</div>
-      ${navItem('compta','📒','Grand Livre')}
+      ${navItem('juridique','⚖️','Juridique')}
+      <div class="nav-s" style="cursor:pointer" onclick="var el=document.getElementById('navMore');el.style.display=el.style.display==='none'?'block':'none'">Plus ▾</div>
+      <div id="navMore" style="display:none">
+      ${navItem('previsionnel','📈','Previsionnel')}
+      ${navItem('aides','🎁','Aides')}
+      ${navItem('demarches','📋','Demarches')}
       ${navItem('simul','📊','Simulateurs')}
-      ${navItem('ged','📁','Mes documents')}
-      ${navItem('archives','📦','Archives & historique')}
-      ${navItem('statuts','📜','Statuts & Docs')}
-      ${navItem('settings','⚙️','Parametres')}
-      ${navItem('juridique','⚖️','Documents juridiques')}
+      ${navItem('embauche','👥','Embauche')}
+      ${navItem('compta','📒','Grand Livre')}
+      ${navItem('ged','📁','Documents')}
+      ${navItem('archives','📦','Archives')}
       ${navItem('creation','🚀','Creer sa societe')}
-      ${navItem('embauche','👥','Simulateur embauche')}
-      ${navItem('urgence','🆘','Mode Urgence')}
+      ${navItem('statuts','📜','Statuts')}
+      ${navItem('urgence','🆘','Urgence')}
+      ${navItem('settings','⚙️','Parametres')}
+      </div>
     </nav>
     <div class="side-foot">FiscaPro v3.0 — 2025/2026<br>⚠️ Ne remplace pas un expert-comptable</div>
   </div>
