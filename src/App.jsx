@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 
-const APP_URL = 'https://fcf-trd.github.io/fiscapro/'
+const APP_URL = '/app.html'
 
 const features = [
   { icon: '🏦', title: 'Import bancaire PDF', desc: 'Glisse tes releves Qonto, BNP, SG... Toutes les transactions extraites et categorisees automatiquement.' },
