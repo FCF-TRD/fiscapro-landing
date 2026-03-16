@@ -1390,18 +1390,42 @@ window.dlPVAG=()=>{
 };
 
 window.dlCSV=()=>{
-  let csv='Date;Type;Tiers;Libellé;Catégorie;HT;TVA%;TTC;Statut;Source\n';
-  [...factures.map(f=>({...f,tp:'Recette'})),...depenses.map(d=>({...d,tp:'Dépense'}))].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(r=>{
-    csv+=`${fmtD(r.date)};${r.tp};${r.client||''};${r.desc||''};${r.cat||''};${r.ht};${r.tva||0}%;${((r.ht||0)*(1+(r.tva||0)/100)).toFixed(2)};${r.paye?'Payé':'Attente'};${r.src||'manuel'}\n`;
-  });
-  dlFile(`ecritures_${today()}.csv`,csv);
+  const rows=[...factures.map(f=>({...f,tp:'Recette'})),...depenses.map(d=>({...d,tp:'Depense'}))].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  // Generate CSV for download
+  let csv='Date;Type;Tiers;Libelle;Categorie;HT;TVA%;TTC;Statut;Source\n';
+  rows.forEach(r=>{csv+=`${fmtD(r.date)};${r.tp};${r.client||''};${(r.desc||'').replace(/;/g,',')};${r.cat||''};${(r.ht||0).toFixed(2)};${r.tva||0}%;${((r.ht||0)*(1+(r.tva||0)/100)).toFixed(2)};${r.paye?'Paye':'Attente'};${r.src||'manuel'}\n`;});
+  // Show HTML preview + download
+  let trs='';rows.forEach(r=>{trs+='<tr><td>'+fmtD(r.date)+'</td><td><span style="padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:'+(r.tp==='Recette'?'#E8F5EE;color:#0A6847':'#FEE2E2;color:#DC3545')+'">'+r.tp+'</span></td><td>'+((r.client||r.desc||'').substring(0,30))+'</td><td>'+((r.cat||'')).substring(0,20)+'</td><td class="right-align">'+fmt2(r.ht||0)+'</td><td class="right-align bold">'+fmt2((r.ht||0)*(1+(r.tva||0)/100))+'</td></tr>';});
+  const h=docHeader('Export CSV — Ecritures comptables',rows.length+' ecritures du '+fmtD(rows[0]?.date)+' au '+fmtD(rows[rows.length-1]?.date))
+  +'<div class="summary-box"><div class="summary-item"><div class="si-label">Recettes</div><div class="si-value">'+fmt(factures.reduce((s,f)=>s+(f.ht||0),0))+'</div></div>'
+  +'<div class="summary-item"><div class="si-label">Depenses</div><div class="si-value" style="color:#DC3545">'+fmt(depenses.reduce((s,d)=>s+(d.ht||0),0))+'</div></div>'
+  +'<div class="summary-item"><div class="si-label">Ecritures</div><div class="si-value">'+rows.length+'</div></div></div>'
+  +'<div class="section"><div class="section-title">Detail des ecritures</div>'
+  +'<table><thead><tr><th>Date</th><th>Type</th><th>Tiers</th><th>Categorie</th><th class="right-align">HT</th><th class="right-align">TTC</th></tr></thead><tbody>'+trs+'</tbody></table></div>';
+  openDocWindow('Export CSV — Ecritures',h);
+  // Also download the CSV file
+  dlFile('ecritures_'+today()+'.csv',csv);
 };
 
 window.dlFEC=()=>{
-  let fec='JournalCode|JournalLib|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|EcritureLib|Debit|Credit\n';let n=1;
-  factures.forEach(f=>{fec+=`VE|Ventes|${String(n++).padStart(6,'0')}|${(f.date||'').replace(/-/g,'')}|701000|Ventes|F${n}|${f.desc||''}|0|${(f.ht||0).toFixed(2)}\n`;});
-  depenses.forEach(d=>{fec+=`AC|Achats|${String(n++).padStart(6,'0')}|${(d.date||'').replace(/-/g,'')}|601000|Achats|D${n}|${d.desc||''}|${(d.ht||0).toFixed(2)}|0\n`;});
-  dlFile(`FEC_${company.siren||'SIREN'}_${today()}.txt`,fec);
+  let fec='JournalCode|JournalLib|EcritureNum|EcritureDate|CompteNum|CompteLib|PieceRef|EcritureLib|Debit|Credit\n';
+  let n=1;const fecRows=[];
+  factures.forEach(f=>{const num=String(n++).padStart(6,'0');const row={j:'VE',jl:'Ventes',n:num,d:(f.date||'').replace(/-/g,''),c:'701000',cl:'Ventes de prestations',ref:'F'+n,lib:(f.desc||'').substring(0,40),deb:'0.00',cre:(f.ht||0).toFixed(2)};fec+=row.j+'|'+row.jl+'|'+row.n+'|'+row.d+'|'+row.c+'|'+row.cl+'|'+row.ref+'|'+row.lib+'|'+row.deb+'|'+row.cre+'\n';fecRows.push(row);});
+  depenses.forEach(d=>{const num=String(n++).padStart(6,'0');const row={j:'AC',jl:'Achats',n:num,d:(d.date||'').replace(/-/g,''),c:'601000',cl:'Achats et charges',ref:'D'+n,lib:(d.desc||'').substring(0,40),deb:(d.ht||0).toFixed(2),cre:'0.00'};fec+=row.j+'|'+row.jl+'|'+row.n+'|'+row.d+'|'+row.c+'|'+row.cl+'|'+row.ref+'|'+row.lib+'|'+row.deb+'|'+row.cre+'\n';fecRows.push(row);});
+  // HTML preview
+  let trs='';fecRows.forEach(r=>{trs+='<tr><td>'+r.j+'</td><td>'+r.n+'</td><td>'+r.d+'</td><td>'+r.c+'</td><td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+r.lib+'</td><td class="right-align">'+(parseFloat(r.deb)>0?fmt2(parseFloat(r.deb)):'')+'</td><td class="right-align">'+(parseFloat(r.cre)>0?fmt2(parseFloat(r.cre)):'')+'</td></tr>';});
+  const totDeb=fecRows.reduce((s,r)=>s+parseFloat(r.deb),0);const totCre=fecRows.reduce((s,r)=>s+parseFloat(r.cre),0);
+  const h=docHeader('Fichier des Ecritures Comptables (FEC)','SIREN '+(company.siren||'')+ ' — Art. L47 A-I du LPF')
+  +'<div class="al" style="background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.12);color:#2563EB;padding:10px 14px;border-radius:8px;font-size:11px;margin-bottom:16px"><span>🏛️</span><span>Le FEC est <b>obligatoire</b> en cas de controle fiscal. Ce fichier contient toutes vos ecritures au format normalise (art. A47 A-1 du LPF). Conservez-le pendant 6 ans.</span></div>'
+  +'<div class="summary-box"><div class="summary-item"><div class="si-label">Ecritures</div><div class="si-value">'+fecRows.length+'</div></div>'
+  +'<div class="summary-item"><div class="si-label">Total Debit</div><div class="si-value">'+fmt(totDeb)+'</div></div>'
+  +'<div class="summary-item"><div class="si-label">Total Credit</div><div class="si-value">'+fmt(totCre)+'</div></div></div>'
+  +'<div class="section"><div class="section-title">Ecritures comptables</div>'
+  +'<table><thead><tr><th>Journal</th><th>N°</th><th>Date</th><th>Compte</th><th>Libelle</th><th class="right-align">Debit</th><th class="right-align">Credit</th></tr></thead><tbody>'+trs
+  +'<tr class="total-row"><td colspan="5" class="bold">TOTAUX</td><td class="right-align bold">'+fmt(totDeb)+'</td><td class="right-align bold">'+fmt(totCre)+'</td></tr>'
+  +'</tbody></table></div>';
+  openDocWindow('FEC — '+company.siren,h);
+  dlFile('FEC_'+(company.siren||'SIREN')+'_'+today()+'.txt',fec);
 };
 
 // ============ OPTIMISATION ============
