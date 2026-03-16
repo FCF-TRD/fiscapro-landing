@@ -1008,6 +1008,121 @@ window.dlFEC=()=>{
 };
 
 // ============ OPTIMISATION ============
+function getSpecificOptis(ape,type,c,t,company){
+  const mk=(ok,sv,t2,simple,detail,tags,why)=>({ok,sv:sv||0,t:t2,simple,detail,tags,why:why||''});
+  const a=(ape||'').replace(/[.\s]/g,'');
+  const items=[];
+  const nom=company.nom||'Ta societe';
+
+  // ═══ PAR CODE APE / SECTEUR ═══
+  // Formation professionnelle (8559A, 8559B)
+  if(/^855/.test(a)){
+    items.push(mk(true,0,'Exoneration TVA formations (art. 261-4-4° CGI)',
+      `En tant qu'organisme de formation, ${nom} peut etre exoneree de TVA sur ses prestations de formation. Cela veut dire : pas de TVA a facturer, pas de CA3/CA12 a deposer. Enorme gain de temps et d'argent pour tes clients particuliers.`,
+      'Demande d\'attestation aupres de la DREETS. NDA obligatoire. Compatible Qualiopi. Attention : tu ne recuperes plus la TVA sur tes achats.',
+      ['Formation','TVA']));
+    items.push(mk(true,0,'Subventions OPCO — fais payer la formation par l\'OPCO',
+      `Tes clients entreprises peuvent faire financer leurs formations par leur OPCO (AKTO, OPCO EP, AFDAS...). Tu factures l\'OPCO, le client ne paye rien. 80% des organismes de formation ne demarchent pas les OPCO — c\'est une mine d\'or.`,
+      'Inscription sur les catalogues OPCO. Convention de formation tripartite. Facture a l\'OPCO avec n° de prise en charge. Delai de paiement : 30-45j en general.',
+      ['Formation','OPCO','Revenue']));
+    items.push(mk(true,0,'BPF (Bilan Pedagogique et Financier) — obligatoire',
+      `Chaque annee avant le 30 avril, tu dois deposer ton BPF sur l\'extranet de la DREETS. Si tu ne le fais pas, tu perds ton NDA (numero de declaration d\'activite). C\'est la mort de ton activite de formation.`,
+      'Extranet : https://mesdemarches.emploi.gouv.fr. Declarer : CA formation, nb stagiaires, nb heures, financeurs. Meme si CA = 0.',
+      ['Obligation','Annuel']));
+    items.push(mk(true,0,'Qualiopi — accede aux marches publics et OPCO',
+      `${nom}${company.qualiopi?' est deja certifiee Qualiopi':' devrait passer Qualiopi'}. Sans Qualiopi, pas de financement OPCO ni CPF. Avec Qualiopi, tu accedes a 90% du marche de la formation.`,
+      'Audit initial ~1 500-3 000€. Renouvellement tous les 3 ans. 7 criteres, 32 indicateurs. Preparable en 2-3 mois.',
+      ['Formation','Certification']));
+    items.push(mk(true,0,'Sous-traitance formateurs — deductible integralement',
+      `Tu payes des formateurs externes ? 100% deductible. Pas de charges sociales si ce sont des independants (facture). Verifie qu\'ils ont bien un SIREN et qu\'ils te facturent.`,
+      'Art. 39-1 CGI. Facture obligatoire. Attention au risque de requalification en salariat si lien de subordination. DAS2 si > 1 200€/an/prestataire.',
+      ['Formation','Charges']));
+  }
+
+  // IT / Dev / Conseil informatique (62xx)
+  if(/^62/.test(a)){
+    items.push(mk(true,0,'CIR sur tes developpeurs — 30% rembourse',
+      `Si ${nom} developpe des logiciels innovants, l\'Etat rembourse 30% des salaires de tes devs (y compris le tien si tu codes). Un dev a 45K€/an = 13 500€ de credit d\'impot.`,
+      'Art. 244 quater B CGI. Inclut : salaires (200% forfait), amortissement materiel R&D, sous-traitance agreee. Formulaire 2069-A. Documentation technique obligatoire.',
+      ['Dev','CIR','30%']));
+    items.push(mk(true,0,'IP Box — tes logiciels taxes a 10% seulement',
+      `Les revenus de tes logiciels (licences, SaaS, cessions) peuvent etre taxes a 10% au lieu de 25%. Si ${nom} facture 100K€ de SaaS, c\'est 10K€ d\'IS au lieu de 25K€.`,
+      'Art. 238 CGI. Necessite une documentation "nexus" (lien entre R&D et revenus). Logiciel original, brevets, certifications d\'utilite.',
+      ['Dev','IP Box','10%']));
+    items.push(mk(true,0,'Amortissement materiel info en 3 ans',
+      'Ton MacBook, tes ecrans, serveurs — tout s\'amortit en 3 ans (au lieu de 5 normalement). Un Mac a 2 000€ = 667€/an de deduction pendant 3 ans.',
+      'Usage professionnel du bareme fiscal. Amortissement lineaire ou degressif possible. Facture au nom de la societe obligatoire.',
+      ['Dev','Materiel']));
+  }
+
+  // Commerce (45xx, 46xx, 47xx)
+  if(/^4[567]/.test(a)){
+    items.push(mk(true,0,'Provision pour depreciation de stock',
+      `Si tu as du stock invendu, tu peux provisionner sa depreciation et reduire ton benefice. Stock achete 10 000€ mais qui vaut 6 000€ = 4 000€ de deduction.`,
+      'Art. 39-1-5° CGI. Inventaire physique obligatoire. Depreciation justifiee par : obsolescence, dates de peremption, prix du marche. Reprise si le stock se revend.',
+      ['Commerce','Stock']));
+    items.push(mk(true,0,'Frais de livraison et transport — deductibles',
+      'Tous tes frais de livraison (Colissimo, Mondial Relay, transporteurs) sont deductibles a 100%. Pense aussi aux frais d\'emballage.',
+      'Charge d\'exploitation classique. Factures au nom de la societe.',
+      ['Commerce','Logistique']));
+  }
+
+  // Conseil / Professions liberales (69xx, 70xx, 71xx, 73xx, 74xx)
+  if(/^6[9]|^7[0134]/.test(a)){
+    items.push(mk(true,0,'Adhesion AGA/CGA — bonus fiscal',
+      `En adherant a un Centre de Gestion Agree (CGA) ou une Association de Gestion Agreee (AGA), tu evites la majoration de 15% de ton benefice a l\'IR. Cotisation ~150-300€/an.`,
+      'Art. 158-7 CGI. Obligatoire si IR pour eviter la majoration. Aussi utile pour l\'accompagnement (stats sectorielles, prevention fiscale).',
+      ['Liberal','CGA']));
+    items.push(mk(true,0,'Frais de deplacement client — bareme ou reel',
+      'Chaque deplacement chez un client est deductible. Soit au bareme kilometrique (plus simple), soit au reel (peages + essence + parking). Tiens un carnet de bord.',
+      'Bareme fiscal 2025. Carnet de bord : date, lieu de depart, destination, km, motif. Plus avantageux que vehicule de fonction si < 15 000 km/an.',
+      ['Liberal','Deplacements']));
+  }
+
+  // Restauration (56xx)
+  if(/^56/.test(a)){
+    items.push(mk(true,0,'Avantages en nature repas — evaluation forfaitaire',
+      'En restauration, les repas pris sur place par le dirigeant sont evalues forfaitairement (environ 5€/repas au lieu du prix reel). Enorme economie sur l\'avantage en nature.',
+      'Arrete du 10/12/2002. Evaluation forfaitaire : environ 5,20€/repas en 2025. Un repas par service maximum.',
+      ['Restauration','Avantage']));
+  }
+
+  // Immobilier (68xx)
+  if(/^68/.test(a)){
+    items.push(mk(true,0,'Amortissement immobilier — le levier n°1',
+      'En SCI a l\'IS ou en LMNP, tu amortis le bien immobilier (hors terrain) sur 25-30 ans. Un bien a 200 000€ = ~6 000-7 000€/an de deduction sans sortie de tresorerie.',
+      'Decomposition par composant : gros oeuvre 50 ans, toiture 25 ans, amenagements 15 ans, equipements 10 ans. Terrain non amortissable (~20% du prix).',
+      ['Immobilier','Amortissement']));
+  }
+
+  // ═══ PAR STRUCTURE JURIDIQUE ═══
+  if(type==='SAS'||type==='SASU'){
+    items.push(mk(true,0,'SAS/SASU : dividendes sans charges sociales',
+      `En ${type}, tes dividendes ne supportent QUE la flat tax (30%). Pas de charges sociales en plus. C\'est le gros avantage vs SARL/EURL. Profite-en : verse-toi un salaire minimum et complete en dividendes.`,
+      'PFU 30% = 12,8% IR + 17,2% PS. Option bareme progressif possible si tranche marginale < 12,8%. Art. 200 A CGI.',
+      [type,'Dividendes','Avantage']));
+    items.push(mk(company.rem===0&&c.ca>5000,0,'Attention : zero salaire = zero protection sociale',
+      `Tu ne te verses aucun salaire. En ${type}, pas de salaire = pas de couverture maladie, pas de retraite, pas d\'indemnites journalieres. Meme 500€/mois te donne une protection.`,
+      'Affiliation au regime general comme assimile salarie. Cotisations ~65% du brut. Minimum pour valider des trimestres retraite : ~1 747€/trimestre (2025).',
+      [type,'Protection','Alerte'],
+      company.rem>0?'Tu te verses deja un salaire':''));
+  }
+  if(type==='SARL'||type==='EURL'){
+    items.push(mk(true,0,`${type} : augmente ton capital pour optimiser les dividendes`,
+      `En ${type}, les dividendes au-dessus de 10% du capital sont charges (~45%). Ton capital est de ${(company.capital||0).toLocaleString('fr-FR')}€ → seuil = ${((company.capital||0)*.10).toLocaleString('fr-FR')}€/an. Augmente le capital par incorporation de reserves (gratuit) pour monter ce seuil.`,
+      'Art. L223-32 C.com. Incorporation de reserves : PV AGE + depot au greffe (~200€). Le capital augmente sans sortir de cash. Alternative : apport en compte courant (mais ne compte pas pour le seuil 10%).',
+      [type,'Capital','Dividendes']));
+  }
+  if(type==='EURL'&&company.regime!=='is'){
+    items.push(mk(true,0,'EURL a l\'IR : passe a l\'IS si benefice > 30K€',
+      `Ton benefice est de ${fmt(c.ben)}. A l\'IR, tout est impose a ta tranche marginale. A l\'IS, les premiers 42 500€ sont a 15%. Si ton benefice depasse 30 000€, l\'IS est presque toujours plus interessant.`,
+      'Option IS : courrier recommande au SIE avant fin du 3e mois de l\'exercice. Revocable pendant 5 ans (depuis 2019). Simulation conseillee avant.',
+      ['EURL','Regime','Strategie']));
+  }
+
+  return items;
+}
+
 function renderOpti(el){
   const c=compute();const t=c.t;
   const age=company.dateCreation?((Date.now()-new Date(company.dateCreation))/(365.25*86400000)):3;
@@ -1022,8 +1137,14 @@ function renderOpti(el){
   // Filter: n=not applicable, pour MA société uniquement
   const mk=(ok,sv,t2,simple,detail,tags,why)=>({ok,sv:sv||0,t:t2,simple,detail,tags,why:why||''});
 
+  // Specific optimizations based on APE + structure
+  const specificItems=getSpecificOptis(company.ape,company.type,c,t,company);
+  const apeLabel=company.apeLabel||getAPELabel(company.ape)||'ton activite';
+
   const cats=[
-    {id:'impots',icon:'🏛️',label:'Payer moins d\'impôts',color:'#6366f1',desc:`Ce que ${company.nom||'ta société'} peut déduire ou réduire sur son impôt`,items:[
+    // FIRST: personalized category
+    ...(specificItems.length>0?[{id:'specifique',icon:'🎯',label:'Specifique a '+apeLabel,color:'#0A6847',desc:`Optimisations ciblees pour ${company.nom||'ta societe'} (${company.type}) — APE ${company.ape||'?'}`,items:specificItems}]:[]),
+    {id:'impots',icon:'🏛️',label:'Payer moins d\'impôts',color:'#2563EB',desc:`Ce que ${company.nom||'ta société'} peut déduire ou réduire sur son impôt`,items:[
       mk(isIS&&c.ca<=10e6, Math.min(Math.max(c.ben,0),F.ISS)*0.10,
         'Taux réduit IS à 15%',
         `${company.nom||'Ta société'} est à l'IS avec un CA de ${fmt(c.ca)}. Tu payes seulement 15% d'impôt sur tes premiers ${fmt(F.ISS)} de bénéfice au lieu de 25%. C'est automatique, pas besoin de faire quoi que ce soit !`,
