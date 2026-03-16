@@ -2797,6 +2797,171 @@ window.markPaid=(num)=>{
   const f=factures.find(f=>f.desc&&f.client);if(f)f.paye=true;persist();renderPage();
 };
 
+// ============ NOTES DE FRAIS + IK ============
+const BAREME_IK={3:{5000:.529,20000:.316,plus:.370},4:{5000:.606,20000:.340,plus:.407},5:{5000:.636,20000:.357,plus:.427},6:{5000:.665,20000:.374,plus:.447},7:{5000:.697,20000:.394,plus:.470}};
+
+function calcIK(cv,km){
+  cv=Math.min(Math.max(cv,3),7);
+  const b=BAREME_IK[cv];
+  if(km<=5000)return Math.round(km*b[5000]*100)/100;
+  if(km<=20000)return Math.round((km*b[20000]+1065)*100)/100;
+  return Math.round(km*b.plus*100)/100;
+}
+
+function renderFrais(el){
+  const fraisData=load('notesFrais',[]);
+  const fraisExo=fraisData.filter(f=>f.date&&new Date(f.date).getFullYear()===currentExercice);
+  const totalFrais=fraisExo.reduce((s,f)=>s+f.montant,0);
+  const totalIK=fraisExo.filter(f=>f.type==='ik').reduce((s,f)=>s+f.montant,0);
+  const totalRepas=fraisExo.filter(f=>f.type==='repas').reduce((s,f)=>s+f.montant,0);
+  const totalAutre=fraisExo.filter(f=>f.type!=='ik'&&f.type!=='repas').reduce((s,f)=>s+f.montant,0);
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🚗 Notes de frais ${currentExercice}</h2><div class="top-s">IK, repas, deplacements — tout est deductible</div></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700" onchange="setExercice(this.value)">
+        ${getExercices().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>${y}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="gr g4 kpi-grid" style="margin-bottom:16px">
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--acc)">${fmt(totalFrais)}</div><div class="kpi-l">Total deductible</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--blu)">${fmt(totalIK)}</div><div class="kpi-l">IK</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--org)">${fmt(totalRepas)}</div><div class="kpi-l">Repas</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--pur)">${fmt(totalAutre)}</div><div class="kpi-l">Autres</div></div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+    <button class="bt bt-p" onclick="openNewFrais('ik')">🚗 Indemnite kilometrique</button>
+    <button class="bt bt-s" onclick="openNewFrais('repas')">🍽️ Frais de repas</button>
+    <button class="bt bt-s" onclick="openNewFrais('deplacement')">🚄 Deplacement</button>
+    <button class="bt bt-s" onclick="openNewFrais('autre')">📎 Autre frais</button>
+  </div>
+
+  <!-- SIMULATEUR IK -->
+  <div class="cd" style="margin-bottom:16px">
+    <div class="cd-t">🧮 Simulateur IK — Bareme fiscal 2025</div>
+    <div class="gr g3" style="gap:10px;margin-bottom:12px">
+      <div class="fg"><label>Puissance fiscale (CV)</label><select class="inp" id="ikCV" onchange="updateIKSimul()">
+        ${[3,4,5,6,7].map(v=>`<option value="${v}" ${v===5?'selected':''}>${v} CV</option>`).join('')}
+      </select></div>
+      <div class="fg"><label>Kilometres annuels</label><input class="inp" type="number" id="ikKM" value="10000" oninput="updateIKSimul()"></div>
+      <div class="fg"><label>Resultat</label><div id="ikResult" style="padding:9px 12px;background:var(--bg3);border-radius:8px;font-size:16px;font-weight:800;color:var(--acc)">${fmt2(calcIK(5,10000))}</div></div>
+    </div>
+    <div id="ikDetail" style="font-size:11px;color:var(--tx3);line-height:1.6">5 CV x 10 000 km = <b>${fmt2(calcIK(5,10000))}</b> d'indemnites deductibles. Pas de charges sociales, pas d'IR. Tiens un carnet de bord : date, depart, arrivee, km, motif.</div>
+  </div>
+
+  <!-- LISTE -->
+  ${fraisExo.length>0?`
+  <div class="cd">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div class="cd-t" style="margin-bottom:0">Mes notes de frais (${fraisExo.length})</div>
+      <button class="bt bt-p sm" onclick="genNoteFraisPDF()">📄 Generer PDF</button>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="hide-mob">Details</th><th style="text-align:right">Montant</th><th></th></tr></thead><tbody>
+    ${fraisExo.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(f=>`<tr>
+      <td style="white-space:nowrap">${fmtD(f.date)}</td>
+      <td><span class="tg ${f.type==='ik'?'t-blu':f.type==='repas'?'t-org':'t-pur'}">${f.type==='ik'?'IK':f.type==='repas'?'Repas':f.type==='deplacement'?'Deplacement':'Autre'}</span></td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.desc||''}</td>
+      <td class="hide-mob" style="font-size:10px;color:var(--tx3)">${f.detail||''}</td>
+      <td style="text-align:right;font-weight:700">${fmt2(f.montant)}</td>
+      <td><button class="bt bt-d sm" onclick="delFrais('${f.id}')">✕</button></td>
+    </tr>`).join('')}
+    <tr style="background:var(--bg3)"><td colspan="4" style="font-weight:700">Total</td><td style="text-align:right;font-weight:800;color:var(--acc)">${fmt2(totalFrais)}</td><td></td></tr>
+    </tbody></table></div>
+  </div>`:
+  `<div class="cd" style="text-align:center;padding:30px;color:var(--tx3)"><div style="font-size:40px;margin-bottom:8px">📝</div>Aucune note de frais pour ${currentExercice}</div>`}
+
+  <div class="al al-i" style="margin-top:12px"><span>💡</span><span><b>Astuce :</b> Les frais de repas sont deductibles entre 5,35€ et 20,70€ par repas (2025). Les IK sont exonerees de charges et d'IR. Conserve tous tes justificatifs.</span></div>`;
+}
+
+window.updateIKSimul=()=>{
+  const cv=+($('#ikCV')?.value||5);const km=+($('#ikKM')?.value||0);
+  const result=calcIK(cv,km);
+  const el=$('#ikResult');if(el)el.innerHTML=fmt2(result);
+  const det=$('#ikDetail');if(det)det.innerHTML=cv+' CV x '+km.toLocaleString('fr-FR')+' km = <b>'+fmt2(result)+'</b> d\'indemnites deductibles. Pas de charges sociales, pas d\'IR. Tiens un carnet de bord.';
+};
+
+window.openNewFrais=(type)=>{
+  const m=document.createElement('div');m.className='modal-bg';m.onclick=e=>{if(e.target===m)m.remove();};
+  let fields='';
+  if(type==='ik'){
+    fields=`<div class="gr g3"><div class="fg"><label>Puissance (CV)</label><select class="inp" id="frCV">${[3,4,5,6,7].map(v=>`<option value="${v}" ${v===5?'selected':''}>${v} CV</option>`).join('')}</select></div>
+    <div class="fg"><label>Kilometres</label><input class="inp" type="number" id="frKM" placeholder="Ex: 120"></div>
+    <div class="fg"><label>Montant auto</label><div id="frMontantAuto" style="padding:9px 12px;background:var(--bg3);border-radius:8px;font-weight:700;color:var(--acc)">—</div></div></div>
+    <div class="fg"><label>Trajet (depart → arrivee)</label><input class="inp" id="frTrajet" placeholder="Paris → Lyon"></div>
+    <div class="fg"><label>Motif</label><input class="inp" id="frMotif" placeholder="Reunion client, formation..."></div>
+    <script>document.getElementById('frKM').addEventListener('input',function(){var r=calcIK(+(document.getElementById('frCV').value),+(this.value||0));document.getElementById('frMontantAuto').innerHTML=fmt2(r);})<\/script>`;
+  }else if(type==='repas'){
+    fields=`<div class="fg"><label>Montant du repas (€)</label><input class="inp" type="number" step="0.01" id="frMontant" placeholder="Ex: 15.50"></div>
+    <div style="font-size:10px;color:var(--tx3);margin:-8px 0 14px">Deductible entre 5,35€ et 20,70€. On calcule la part deductible automatiquement.</div>
+    <div class="fg"><label>Restaurant / lieu</label><input class="inp" id="frLieu" placeholder="Ex: Brasserie du Coin"></div>
+    <div class="fg"><label>Motif</label><input class="inp" id="frMotif" placeholder="Dejeuner de travail, repas seul..."></div>`;
+  }else{
+    fields=`<div class="fg"><label>Montant (€)</label><input class="inp" type="number" step="0.01" id="frMontant"></div>
+    <div class="fg"><label>Description</label><input class="inp" id="frLieu" placeholder="Billet de train, hotel, parking..."></div>
+    <div class="fg"><label>Motif</label><input class="inp" id="frMotif" placeholder="Deplacement client, salon pro..."></div>`;
+  }
+  m.innerHTML=`<div class="modal fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>${type==='ik'?'🚗 Indemnite kilometrique':type==='repas'?'🍽️ Frais de repas':type==='deplacement'?'🚄 Deplacement':'📎 Autre frais'}</h3><button class="bt bt-s sm" onclick="this.closest('.modal-bg').remove()">✕</button></div>
+  <div class="fg"><label>Date</label><input class="inp" type="date" id="frDate" value="${today()}"></div>
+  ${fields}
+  <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="bt bt-s" onclick="this.closest('.modal-bg').remove()">Annuler</button><button class="bt bt-p" onclick="saveFrais('${type}')">Enregistrer</button></div></div>`;
+  document.body.appendChild(m);
+};
+
+window.saveFrais=(type)=>{
+  const date=$('#frDate')?.value||today();
+  let montant=0,desc='',detail='';
+  if(type==='ik'){
+    const cv=+($('#frCV')?.value||5);const km=+($('#frKM')?.value||0);
+    montant=calcIK(cv,km);
+    desc=($('#frTrajet')?.value||'Trajet')+' — '+km+'km';
+    detail=cv+'CV x '+km+'km = '+fmt2(montant)+'. Motif: '+($('#frMotif')?.value||'');
+  }else if(type==='repas'){
+    const brut=+($('#frMontant')?.value||0);
+    montant=Math.min(Math.max(brut-5.35,0),20.70-5.35);// Part deductible
+    desc=($('#frLieu')?.value||'Repas')+' ('+fmt2(brut)+' paye, '+fmt2(montant)+' deductible)';
+    detail='Motif: '+($('#frMotif')?.value||'')+'. Plancher 5,35€, plafond 20,70€.';
+  }else{
+    montant=+($('#frMontant')?.value||0);
+    desc=$('#frLieu')?.value||type;
+    detail='Motif: '+($('#frMotif')?.value||'');
+  }
+  if(montant<=0){alert('Montant invalide');return;}
+  const frais=load('notesFrais',[]);
+  frais.push({id:uid(),date,type,montant:Math.round(montant*100)/100,desc,detail});
+  save('notesFrais',frais);
+  // Add to depenses for accounting
+  depenses.push({id:uid(),date,desc,ht:Math.round(montant*100)/100,tva:0,cat:type==='ik'?'Transport/Déplacement':type==='repas'?'Repas/Réception':'Transport/Déplacement',src:'frais'});
+  persist();
+  $('.modal-bg')?.remove();renderPage();
+};
+
+window.delFrais=(id)=>{
+  if(!confirm('Supprimer cette note de frais ?'))return;
+  const frais=load('notesFrais',[]).filter(f=>f.id!==id);save('notesFrais',frais);renderPage();
+};
+
+window.genNoteFraisPDF=()=>{
+  const fraisExo=load('notesFrais',[]).filter(f=>f.date&&new Date(f.date).getFullYear()===currentExercice);
+  const total=fraisExo.reduce((s,f)=>s+f.montant,0);
+  const t=TYPES[company?.type]||TYPES.SAS;
+  let rows='';fraisExo.sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(f=>{
+    rows+='<tr><td>'+fmtD(f.date)+'</td><td>'+(f.type==='ik'?'IK':f.type==='repas'?'Repas':'Deplacement')+'</td><td>'+f.desc+'</td><td class="right-align bold">'+fmt2(f.montant)+'</td></tr>';
+  });
+  const h=docHeader('Note de frais','Exercice '+currentExercice+' — '+fraisExo.length+' lignes',false)
+  +'<table><thead><tr><th>Date</th><th>Type</th><th>Description</th><th class="right-align">Montant</th></tr></thead><tbody>'
+  +rows
+  +'<tr class="total-row"><td colspan="3" class="bold">TOTAL</td><td class="right-align bold">'+fmt2(total)+'</td></tr>'
+  +'</tbody></table>'
+  +'<div class="result-box"><div class="label">Total notes de frais deductibles — '+currentExercice+'</div><div class="value">'+fmt2(total)+'</div></div>'
+  +'<div class="signature-block"><div class="sig">Date et signature du dirigeant</div><div class="sig">Visa comptable</div></div>';
+  openDocWindow('Notes de frais — '+currentExercice,h);
+};
+
 // ============ RELANCES IMPAYES ============
 function renderRelances(el){
   const invs=load('invoices',[]).filter(i=>!i.paid);
@@ -3509,6 +3674,7 @@ render=function(){
       ${navItem('ecritures','📄','Ecritures')}
       ${navItem('facturation','🧾','Factures & Devis')}
       ${navItem('import','📥','Import bancaire')}
+      ${navItem('frais','🚗','Notes de frais')}
       <div class="nav-s">Pilotage</div>
       ${navItem('bilan','📋','Bilan')}
       ${navItem('previsionnel','📈','Previsionnel')}
@@ -3555,6 +3721,7 @@ renderPage=function(){
     case'statuts':renderStatuts(pg);break;
     case'settings':renderSettings(pg);break;
     case'import':renderImportBancaire(pg);break;
+    case'frais':renderFrais(pg);break;
     case'urgence':renderUrgence(pg);break;
   }
 };
