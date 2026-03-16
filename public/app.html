@@ -107,6 +107,17 @@ tr:hover{background:var(--bg3)}
 .chat-suggestions{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chat-suggestions button{font-size:11px;padding:6px 10px;background:var(--bg3);border:1px solid var(--brd);border-radius:16px;color:var(--tx2);cursor:pointer;font-family:inherit;transition:all .15s;white-space:nowrap}
 .chat-suggestions button:hover{border-color:var(--acc);color:var(--acc)}
+/* UPLOAD ZONE */
+.upload-zone{border:2px dashed var(--brd);border-radius:12px;padding:24px 16px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg3)}
+.upload-zone:hover{border-color:var(--acc);background:rgba(10,104,71,.04)}
+.upload-actions{display:none}
+@media(max-width:600px){
+  .upload-zone .desk-label{display:none}
+  .upload-actions{display:flex;gap:8px;justify-content:center;margin-top:10px;flex-wrap:wrap}
+}
+@media(min-width:601px){
+  .upload-actions{display:none!important}
+}
 /* MOBILE NAV */
 .mob-bar{display:none;position:fixed;top:0;left:0;right:0;height:52px;background:var(--acc3);border-bottom:none;z-index:90;padding:0 14px;align-items:center;gap:10px}
 .mob-bar .ham{width:36px;height:36px;border-radius:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex-shrink:0;color:#fff}
@@ -2835,16 +2846,7 @@ function renderFrais(el){
 
   <!-- SCAN PHOTOS -->
   <div class="cd" style="margin-bottom:16px">
-    <div class="dz" id="fraisDZ" style="padding:24px 16px"
-      onclick="document.getElementById('fraisPhotos').click()"
-      ondragover="event.preventDefault();this.style.borderColor='var(--acc)';this.style.background='rgba(10,104,71,.04)'"
-      ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';scanFraisPhotos(event.dataTransfer.files)"
-      ondragleave="this.style.borderColor='';this.style.background=''">
-      <input type="file" id="fraisPhotos" accept="image/*,.pdf,.heic,.heif" multiple capture="environment" style="display:none" onchange="scanFraisPhotos(this.files)">
-      <div style="font-size:36px;margin-bottom:6px">📸</div>
-      <div style="font-size:14px;font-weight:700">Scan tes tickets et factures</div>
-      <div style="font-size:12px;color:var(--tx3);margin-top:4px">Photo, PDF, HEIC — plusieurs fichiers a la fois. L'OCR detecte le montant et la date.</div>
-    </div>
+    ${uploadZone('frais','image/*,.pdf,.heic,.heif',true,'scanFraisPhotos','Scan tes tickets et factures','Photo, PDF, HEIC — plusieurs fichiers. OCR automatique.')}
     <div id="fraisScanQueue" style="margin-top:8px"></div>
     <div id="fraisScanResults" style="margin-top:8px"></div>
   </div>
@@ -2892,6 +2894,28 @@ function renderFrais(el){
   `<div class="cd" style="text-align:center;padding:30px;color:var(--tx3)"><div style="font-size:40px;margin-bottom:8px">📝</div>Aucune note de frais pour ${currentExercice}</div>`}
 
   <div class="al al-i" style="margin-top:12px"><span>💡</span><span><b>Astuce :</b> Les frais de repas sont deductibles entre 5,35€ et 20,70€ par repas (2025). Les IK sont exonerees de charges et d'IR. Conserve tous tes justificatifs.</span></div>`;
+}
+
+// Universal upload zone HTML generator
+function uploadZone(id,accept,multiple,onFiles,label,sublabel){
+  return`<div class="upload-zone" id="${id}_dz"
+    ondragover="event.preventDefault();this.style.borderColor='var(--acc)';this.style.background='rgba(10,104,71,.04)'"
+    ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';${onFiles}(event.dataTransfer.files)"
+    ondragleave="this.style.borderColor='';this.style.background=''">
+    <input type="file" id="${id}_file" accept="${accept}" ${multiple?'multiple':''} style="display:none" onchange="${onFiles}(this.files)">
+    <input type="file" id="${id}_camera" accept="image/*" capture="environment" style="display:none" onchange="${onFiles}(this.files)">
+    <input type="file" id="${id}_gallery" accept="image/*" ${multiple?'multiple':''} style="display:none" onchange="${onFiles}(this.files)">
+    <div onclick="document.getElementById('${id}_file').click()" style="cursor:pointer">
+      <div style="font-size:32px;margin-bottom:6px">📂</div>
+      <div class="desk-label" style="font-size:14px;font-weight:700">${label||'Glisse tes fichiers ici'}</div>
+      <div class="desk-label" style="font-size:11px;color:var(--tx3);margin-top:4px">${sublabel||'Ou clique pour selectionner'}</div>
+    </div>
+    <div class="upload-actions">
+      <button class="bt bt-p sm" onclick="event.stopPropagation();document.getElementById('${id}_camera').click()">📸 Photo</button>
+      <button class="bt bt-s sm" onclick="event.stopPropagation();document.getElementById('${id}_gallery').click()">🖼️ Galerie</button>
+      <button class="bt bt-s sm" onclick="event.stopPropagation();document.getElementById('${id}_file').click()">📁 Fichier</button>
+    </div>
+  </div>`;
 }
 
 window.scanFraisPhotos=async(fileList)=>{
@@ -4009,22 +4033,7 @@ function renderImportBancaire(el){
 
   <!-- ZONE MULTI-UPLOAD -->
   <div class="cd">
-    <div class="dz" id="multiDropzone" style="padding:30px 20px"
-      onclick="document.getElementById('multiFileInput').click()"
-      ondragover="event.preventDefault();this.style.borderColor='var(--acc)';this.style.background='rgba(99,102,241,.06)'"
-      ondrop="handleMultiDrop(event)"
-      ondragleave="this.style.borderColor='';this.style.background=''">
-      <div style="font-size:48px;margin-bottom:10px">📂</div>
-      <div style="font-size:16px;font-weight:800;margin-bottom:8px">Glisse tes documents ici</div>
-      <div style="font-size:13px;color:var(--tx3);margin-bottom:12px">Ou clique pour sélectionner — <b>Plusieurs fichiers à la fois</b></div>
-      <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-        <span class="tg t-blu" style="font-size:11px">📄 Relevés bancaires PDF</span>
-        <span class="tg t-pur" style="font-size:11px">📸 Tickets de caisse (photo)</span>
-        <span class="tg t-grn" style="font-size:11px">🧾 Factures fournisseurs</span>
-        <span class="tg t-org" style="font-size:11px">📋 Notes de frais</span>
-      </div>
-      <input type="file" id="multiFileInput" accept=".pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff" multiple style="display:none" onchange="handleMultiFiles(this.files)">
-    </div>
+    ${uploadZone('bankImport','.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.tiff,.heic,.heif',true,'handleMultiFiles','Releves bancaires, tickets, factures','PDF, photos, HEIC — plusieurs fichiers a la fois')}
 
     <!-- File queue / progress -->
     <div id="importQueue" style="margin-top:12px"></div>
@@ -4523,15 +4532,7 @@ function renderStatuts(el){
   <div class="top"><div><h2>📜 Mes Statuts</h2><div class="top-s">Importe tes statuts pour configurer automatiquement ta société</div></div></div>
 
   <div class="cd">
-    <div class="dz" id="statutsDZ" onclick="document.getElementById('statutsFile').click()"
-      ondragover="event.preventDefault();this.style.borderColor='var(--acc)';this.style.background='rgba(99,102,241,.06)'"
-      ondrop="event.preventDefault();this.style.borderColor='';this.style.background='';handleStatuts(event.dataTransfer.files[0])"
-      ondragleave="this.style.borderColor='';this.style.background=''">
-      <input type="file" id="statutsFile" accept=".pdf,.txt" style="display:none" onchange="handleStatuts(this.files[0])">
-      <div style="font-size:48px;margin-bottom:10px">📜</div>
-      <div style="font-size:16px;font-weight:800;margin-bottom:6px">Glisse tes statuts ici</div>
-      <div style="font-size:12px;color:var(--tx3)">PDF ou texte — Les infos clés seront extraites automatiquement</div>
-    </div>
+    ${uploadZone('statuts','.pdf,.txt,.png,.jpg,.jpeg,.heic,.heif',false,'handleStatutsFiles','Importe tes statuts','PDF, photo ou texte — extraction automatique')}
     <div id="statutsStatus" style="margin-top:12px"></div>
   </div>
 
@@ -4595,6 +4596,7 @@ function renderStatutsFields(){
   </div>`;
 }
 
+window.handleStatutsFiles=(fileList)=>{const f=fileList[0];if(f)handleStatuts(f);};
 window.handleStatuts=async(file)=>{
   if(!file)return;
   const status=$('#statutsStatus');
