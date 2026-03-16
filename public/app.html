@@ -673,9 +673,9 @@ function renderOnboarding(){
 
 // ============ SECTOR HEALTH DATA ============
 const SECTOR_DATA={
-  '41':{nom:'Construction / BTP',defaillances:14723,pctTotal:21,vsHistorique:'+35%',risque:'tres_eleve',margeNette:3.2,tresoCA:5,delaiPaiement:58,
-    causes:['Retards de paiement en cascade','Hausse des couts materiaux','Sinistralite decennale','Sous-estimation des devis'],
-    conseils:['Exige des acomptes de 30% minimum avant chantier','Provision pour risques sur chaque chantier en cours','Assurance decennale : compare chaque annee','Facture des situations intermediaires toutes les 2 semaines']},
+  '41':{nom:'Construction / BTP',defaillances:14723,pctTotal:21.5,vsHistorique:'+12%',risque:'tres_eleve',margeNette:3.5,tresoCA:8,delaiPaiement:55,
+    causes:['Hausse materiaux +27% depuis 2021','Retards paiement 45-90j','Sous-traitance en cascade','Chantier neufs -20%'],
+    conseils:['Acomptes 30% avant chantier','Clause revision prix matieres','Max 30% CA par donneur d\'ordres','Tresorerie previsionnelle hebdo']},
   '42':{ref:'41'},'43':{ref:'41'},
   '45':{nom:'Commerce & reparation auto',defaillances:13701,pctTotal:19,vsHistorique:'+40%',risque:'tres_eleve',margeNette:1.8,tresoCA:4,delaiPaiement:35,
     causes:['Transition electrique destabilise le marche','Baisse des ventes de vehicules neufs','Concurrence en ligne pieces detachees'],
@@ -789,6 +789,139 @@ function renderSectorAlert(c){
   </div>`;
 }
 
+// ============ ALERTE TRESORERIE PREDICTIVE ============
+function renderTresoreriePredictive(c){
+  const bank=computeBankBalance();
+  const currentBalance=bank?bank.total:c.treso;
+  const months=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
+  const now=new Date();
+  const curMonth=now.getMonth();
+
+  // Calculate averages from actual data
+  const caM=Array(12).fill(0);const depM=Array(12).fill(0);
+  factures.forEach(f=>{const m=new Date(f.date).getMonth();caM[m]+=(f.ht||0);});
+  depenses.forEach(d=>{const m=new Date(d.date).getMonth();depM[m]+=(d.ht||0);});
+  const pastMonths=caM.filter((_,i)=>i<=curMonth&&(caM[i]>0||depM[i]>0));
+  const nbPast=Math.max(1,pastMonths.length||1);
+  const avgCA=caM.slice(0,curMonth+1).reduce((a,b)=>a+b,0)/nbPast;
+  const avgDep=depM.slice(0,curMonth+1).reduce((a,b)=>a+b,0)/nbPast;
+
+  // Known upcoming charges
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const remMensuel=(company?.rem||0)*(1+t.cp);
+  const isAcompte=c.is/4;
+  const tvaNette=Math.max(0,c.tvaC-c.tvaD)/12;
+
+  // Upcoming fiscal charges by month (simplified)
+  function getChargesMois(mIdx){
+    let charges=0;
+    charges+=remMensuel; // salaire + charges mensuelles
+    charges+=tvaNette; // TVA mensuelle approx
+    // IS acomptes: mars(2), juin(5), sept(8), dec(11)
+    if([2,5,8,11].includes(mIdx))charges+=isAcompte;
+    // CFE: juin(5) acompte, dec(11) solde
+    if(mIdx===5||mIdx===11)charges+=500; // estimation CFE
+    // URSSAF mensuel
+    charges+=c.chg/12;
+    return charges;
+  }
+
+  // Project 3 months ahead
+  const projections=[];
+  let solde=currentBalance;
+  for(let i=1;i<=3;i++){
+    const mIdx=(curMonth+i)%12;
+    const entrees=avgCA;
+    const sorties=avgDep+getChargesMois(mIdx);
+    solde+=entrees-sorties;
+    projections.push({
+      mois:months[mIdx],
+      entrees,
+      sorties,
+      solde,
+      mIdx
+    });
+  }
+
+  const monthlyExpenses=avgDep+remMensuel+c.chg/12;
+  const hasNegative=projections.some(p=>p.solde<0);
+  const hasLow=projections.some(p=>p.solde>0&&p.solde<monthlyExpenses);
+  const allGood=!hasNegative&&!hasLow;
+
+  // Only show if there's data
+  if(c.ca===0&&c.dep===0&&!bank)return'';
+
+  const alertColor=hasNegative?'var(--red)':hasLow?'var(--org)':'var(--grn)';
+  const alertBg=hasNegative?'rgba(220,53,69,.06)':hasLow?'rgba(230,126,34,.06)':'rgba(10,104,71,.06)';
+  const alertBorder=hasNegative?'rgba(220,53,69,.2)':hasLow?'rgba(230,126,34,.2)':'rgba(10,104,71,.2)';
+  const alertIcon=hasNegative?'🚨':hasLow?'⚠️':'✅';
+  const alertMsg=hasNegative
+    ?'Tresorerie negative prevue dans les 3 prochains mois. Action requise.'
+    :hasLow
+    ?'Tresorerie basse prevue (< 1 mois de charges). Vigilance.'
+    :'Tresorerie saine sur les 3 prochains mois.';
+
+  return`
+  <div class="cd" style="margin-bottom:16px;border-left:3px solid ${alertColor};background:linear-gradient(135deg,var(--bg2),${alertBg})">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);font-weight:700">Alerte Tresorerie Predictive</div>
+        <div style="font-size:16px;font-weight:800;margin-top:2px">Projection 3 mois</div>
+      </div>
+      <div style="padding:6px 12px;border-radius:8px;background:${alertBg};border:1px solid ${alertBorder};font-size:12px;font-weight:700;color:${alertColor}">${alertIcon} ${alertMsg}</div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <div style="flex:1;min-width:70px;padding:10px;background:var(--bg3);border-radius:8px;text-align:center">
+        <div style="font-size:16px;font-weight:900;color:${currentBalance>=0?'var(--grn)':'var(--red)'}">${fmt(currentBalance)}</div>
+        <div style="font-size:9px;color:var(--tx3)">Solde actuel</div>
+      </div>
+      ${projections.map(p=>{
+        const col=p.solde<0?'var(--red)':p.solde<monthlyExpenses?'var(--org)':'var(--grn)';
+        return`<div style="flex:1;min-width:70px;padding:10px;background:var(--bg3);border-radius:8px;text-align:center;position:relative">
+          <div style="font-size:16px;font-weight:900;color:${col}">${fmt(p.solde)}</div>
+          <div style="font-size:9px;color:var(--tx3)">${p.mois} (prevu)</div>
+          <div style="margin-top:6px;display:flex;gap:3px;justify-content:center">
+            <span style="font-size:9px;color:var(--grn)">+${fmt(p.entrees)}</span>
+            <span style="font-size:9px;color:var(--red)">-${fmt(p.sorties)}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Progress bar visualisation -->
+    <div style="margin-bottom:10px">
+      ${projections.map(p=>{
+        const pct=monthlyExpenses>0?Math.min(100,Math.max(0,(p.solde/monthlyExpenses)*100)):100;
+        const col=p.solde<0?'var(--red)':p.solde<monthlyExpenses?'var(--org)':'var(--grn)';
+        return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:40px;font-size:11px;font-weight:700;color:var(--tx2)">${p.mois}</div>
+          <div style="flex:1;height:10px;background:var(--bg4);border-radius:5px;overflow:hidden">
+            <div style="height:100%;width:${Math.max(2,pct)}%;background:${col};border-radius:5px;transition:width .3s"></div>
+          </div>
+          <div style="width:90px;text-align:right;font-size:11px;font-weight:700;color:${col}">${fmt(p.solde)}</div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:9px;color:var(--tx3);text-align:right">Barre = mois de charges couverts (100% = 1 mois de depenses)</div>
+    </div>
+
+    ${hasNegative?`
+    <div style="padding:10px 12px;background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.2);border-radius:8px;margin-top:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--red);margin-bottom:4px">Actions recommandees :</div>
+      <div style="font-size:11px;color:var(--tx2);line-height:1.6">
+        • Relancer les factures impayees (${fmt(c.encours)} en attente)<br>
+        • Negocier un echeancier URSSAF / impots si necessaire<br>
+        • Envisager un decouvert autorise ou un affacturage<br>
+        • Reporter les depenses non urgentes
+      </div>
+    </div>`:''}
+
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <div style="font-size:10px;color:var(--tx3);flex:1">Base : CA moy. ${fmt(avgCA)}/mois — Dep. moy. ${fmt(avgDep)}/mois — Charges connues incluses (IS, TVA, URSSAF, CFE)</div>
+    </div>
+  </div>`;
+}
+
 function renderDashboard(el){
   const c=compute();const t=c.t;
   const bank=computeBankBalance();
@@ -800,6 +933,8 @@ function renderDashboard(el){
   ${renderOnboarding()}
 
   ${renderSectorAlert(c)}
+
+  ${renderTresoreriePredictive(c)}
 
   ${bank?`
   <!-- SOLDE BANCAIRE -->
@@ -1096,20 +1231,162 @@ function renderBilan(el){
 
 function dlFile(name,content){const b=new Blob([content],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
 
+function openDocWindow(title,bodyHtml){
+  var w=window.open('','_blank');
+  var docStr='<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>'+title+'</title>'
+  +'<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">'
+  +'<style>'
+  +'*{margin:0;padding:0;box-sizing:border-box}'
+  +'body{font-family:"Inter",sans-serif;background:#fff;color:#1F2937;padding:40px 50px;font-size:13px;line-height:1.6}'
+  +'.doc-header{border-bottom:3px solid #0A6847;padding-bottom:16px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-start}'
+  +'.doc-header .left h1{font-size:22px;font-weight:900;color:#0A6847;margin-bottom:2px}'
+  +'.doc-header .left .subtitle{font-size:12px;color:#6B7280;font-weight:500}'
+  +'.doc-header .right{text-align:right;font-size:12px;color:#4B5563;line-height:1.7}'
+  +'.doc-header .right .company-name{font-size:15px;font-weight:800;color:#1F2937}'
+  +'.section{margin-bottom:22px}'
+  +'.section-title{font-size:14px;font-weight:800;color:#0A6847;border-bottom:2px solid #0A6847;padding-bottom:5px;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}'
+  +'table{width:100%;border-collapse:collapse;margin-bottom:16px}'
+  +'th{background:#F0F5F2;color:#0A6847;font-size:10px;text-transform:uppercase;letter-spacing:.7px;font-weight:700;padding:8px 12px;text-align:left;border:1px solid #D1DDD6}'
+  +'td{padding:8px 12px;border:1px solid #E5E7EB;font-size:12px}'
+  +'tr:nth-child(even){background:#F9FAFB}'
+  +'.right-align{text-align:right}'
+  +'.bold{font-weight:700}'
+  +'.highlight-row{background:#F0F5F2 !important;font-weight:700}'
+  +'.total-row{background:#0A6847 !important;color:#fff;font-weight:800}'
+  +'.total-row td{border-color:#0A6847}'
+  +'.result-box{background:#F0F5F2;border:2px solid #0A6847;border-radius:8px;padding:16px 20px;margin:16px 0;text-align:center}'
+  +'.result-box .label{font-size:11px;color:#4B5563;text-transform:uppercase;letter-spacing:1px;font-weight:600}'
+  +'.result-box .value{font-size:28px;font-weight:900;color:#0A6847;margin-top:4px}'
+  +'.legal-text{font-size:11px;color:#4B5563;line-height:1.8;margin-bottom:12px}'
+  +'.signature-block{margin-top:40px;display:flex;justify-content:space-between}'
+  +'.signature-block .sig{width:45%;border-top:1px solid #E5E7EB;padding-top:8px;text-align:center;font-size:11px;color:#6B7280}'
+  +'.doc-footer{margin-top:40px;border-top:2px solid #E5E7EB;padding-top:12px;text-align:center;font-size:10px;color:#9CA3AF;font-style:italic}'
+  +'.summary-box{display:flex;gap:16px;margin:16px 0}.summary-item{flex:1;background:#F0F5F2;border:1px solid #D1DDD6;border-radius:8px;padding:14px;text-align:center}'
+  +'.summary-item .si-label{font-size:10px;color:#4B5563;text-transform:uppercase;letter-spacing:.5px;font-weight:600}'
+  +'.summary-item .si-value{font-size:20px;font-weight:900;color:#0A6847;margin-top:4px}'
+  +'.line-item{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #E5E7EB;font-size:12px}'
+  +'.line-item:nth-child(even){background:#F9FAFB}'
+  +'.line-item .line-num{color:#0A6847;font-weight:700;min-width:80px}'
+  +'.line-item .line-val{font-weight:600;text-align:right;min-width:120px}'
+  +'.inv-header{display:flex;justify-content:space-between}.inv-box{border:1px solid #D1DDD6;padding:12px;border-radius:6px;margin-bottom:16px}'
+  +'.inv-mentions{font-size:9px;color:#888;margin-top:30px;border-top:1px solid #eee;padding-top:10px;line-height:1.6}'
+  +'.print-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;background:#0A6847;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:"Inter",sans-serif;margin-bottom:24px}'
+  +'.print-btn:hover{background:#064E32}'
+  +'@media print{.print-btn{display:none !important}body{padding:20px 30px}@page{margin:15mm}}'
+  +'</style></head><body>'
+  +'<button class="print-btn" onclick="window.print()">Imprimer / PDF</button>'
+  +bodyHtml
+  +'<div class="doc-footer">Document g\u00e9n\u00e9r\u00e9 par FiscaPro \u2014 ne remplace pas un expert-comptable</div>'
+  +'</body></html>';
+  w.document.write(docStr);w.document.close();
+}
+
 window.dlBilan=()=>{
   const c=compute();const t=c.t;
   const depByCat={};depenses.forEach(d=>{const k=d.cat||'Autre';depByCat[k]=(depByCat[k]||0)+(d.ht||0);});
-  let txt=`${'═'.repeat(55)}\n  BILAN SIMPLIFIÉ — ${company.nom||t.l}\n${'═'.repeat(55)}\n${t.f} | SIREN: ${company.siren||'N/A'} | ${new Date().toLocaleDateString('fr-FR')}\n\n`;
-  txt+=`PRODUITS: ${fmt(c.ca)}\nCHARGES: ${fmt(c.dep+c.rem+c.chg)}\n`;
-  Object.entries(depByCat).forEach(([k,v])=>{txt+=`  ${k}: ${fmt(v)}\n`;});
-  txt+=`  Rémunération ${t.dir}: ${fmt(c.rem)}\n  Charges sociales: ${fmt(c.chg)}\n`;
-  txt+=`${'─'.repeat(40)}\nRÉSULTAT: ${fmt(c.ben)}\nIS: ${fmt(c.is)}\nNET: ${fmt(c.net)}\nMarge: ${c.ca>0?fmtP(c.net/c.ca):'N/A'}\n`;
-  dlFile(`bilan_${today()}.txt`,txt);
+  const totalCharges=c.dep+c.rem+c.chg;
+  const dateStr=new Date().toLocaleDateString('fr-FR');
+  const exercice=new Date().getFullYear();
+  let chargesRows='';
+  Object.entries(depByCat).forEach(function(entry){chargesRows+='<tr><td>'+entry[0]+'</td><td class="right-align">'+fmt(entry[1])+'</td></tr>';});
+  chargesRows+='<tr><td>R\u00e9mun\u00e9ration '+t.dir+'</td><td class="right-align">'+fmt(c.rem)+'</td></tr>';
+  chargesRows+='<tr><td>Charges sociales</td><td class="right-align">'+fmt(c.chg)+'</td></tr>';
+  chargesRows+='<tr class="total-row"><td>Total charges</td><td class="right-align">'+fmt(totalCharges)+'</td></tr>';
+  const html='<div class="doc-header"><div class="left"><h1>Bilan Simplifi\u00e9</h1><div class="subtitle">Exercice clos le 31/12/'+exercice+'</div></div>'
+    +'<div class="right"><div class="company-name">'+(company.nom||t.l)+'</div><div>'+t.f+'</div><div>SIREN : '+(company.siren||'N/A')+'</div><div>'+(company.adresse||'')+'</div><div>Date : '+dateStr+'</div></div></div>'
+    +'<div class="section"><div class="section-title">Actif / Passif</div>'
+    +'<table><thead><tr><th style="width:60%">Actif</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +'<tr><td>Actif immobilis\u00e9</td><td class="right-align">'+fmt(0)+'</td></tr>'
+    +'<tr><td>Actif circulant (CA)</td><td class="right-align">'+fmt(c.ca)+'</td></tr>'
+    +'<tr><td>Tr\u00e9sorerie</td><td class="right-align">'+fmt(c.treso)+'</td></tr>'
+    +'<tr class="highlight-row"><td>Total Actif</td><td class="right-align">'+fmt(c.ca+c.treso)+'</td></tr>'
+    +'</tbody></table>'
+    +'<table><thead><tr><th style="width:60%">Passif</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +'<tr><td>Capital social</td><td class="right-align">'+fmt(company.capital||0)+'</td></tr>'
+    +'<tr><td>R\u00e9sultat net</td><td class="right-align">'+fmt(c.net)+'</td></tr>'
+    +'<tr><td>Capitaux propres</td><td class="right-align">'+fmt((company.capital||0)+c.net)+'</td></tr>'
+    +'<tr><td>Dettes</td><td class="right-align">'+fmt(c.dep)+'</td></tr>'
+    +'<tr class="highlight-row"><td>Total Passif</td><td class="right-align">'+fmt((company.capital||0)+c.net+c.dep)+'</td></tr>'
+    +'</tbody></table></div>'
+    +'<div class="section"><div class="section-title">Compte de R\u00e9sultat</div>'
+    +'<table><thead><tr><th>Produits</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +'<tr><td>Chiffre d\'affaires HT</td><td class="right-align">'+fmt(c.ca)+'</td></tr>'
+    +'<tr class="highlight-row"><td>Total produits</td><td class="right-align">'+fmt(c.ca)+'</td></tr>'
+    +'</tbody></table>'
+    +'<table><thead><tr><th>Charges</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +chargesRows
+    +'</tbody></table></div>'
+    +'<div class="section"><div class="section-title">R\u00e9sultat</div>'
+    +'<table><tbody>'
+    +'<tr><td class="bold">R\u00e9sultat avant imp\u00f4t</td><td class="right-align bold">'+fmt(c.ben)+'</td></tr>'
+    +'<tr><td>Imp\u00f4t sur les soci\u00e9t\u00e9s (IS)</td><td class="right-align">'+fmt(c.is)+'</td></tr>'
+    +'<tr class="total-row"><td>R\u00e9sultat net</td><td class="right-align">'+fmt(c.net)+'</td></tr>'
+    +'</tbody></table>'
+    +'<div class="result-box"><div class="label">R\u00e9sultat net de l\'exercice</div><div class="value">'+fmt(c.net)+'</div>'
+    +'<div style="margin-top:6px;font-size:12px;color:#4B5563">Marge nette : '+(c.ca>0?fmtP(c.net/c.ca):'N/A')+'</div></div></div>';
+  openDocWindow('Bilan Simplifi\u00e9 - '+(company.nom||t.l),html);
 };
 
 window.dlPVAG=()=>{
   const c=compute();const t=c.t;
-  dlFile(`pvag_${today()}.txt`,`PV ASSEMBLÉE GÉNÉRALE — ${company.nom||t.l}\n${t.f} | Capital: ${fmt(company.capital)} | SIREN: ${company.siren}\n\nLe ${new Date().toLocaleDateString('fr-FR')}\n\nRÉSOLUTION 1: Approbation des comptes\nCA: ${fmt(c.ca)} | Résultat net: ${fmt(c.net)}\n\nRÉSOLUTION 2: Affectation\n${c.net>=0?`Réserve légale (5%): ${fmt(c.net*.05)}\nReport à nouveau: ${fmt(c.net*.95)}`:`Déficit reporté: ${fmt(Math.abs(c.net))}`}`);
+  const dateStr=new Date().toLocaleDateString('fr-FR');
+  const exercice=new Date().getFullYear();
+  let affectation='';
+  if(c.net>=0){
+    affectation='<tr><td>R\u00e9serve l\u00e9gale (5%)</td><td class="right-align">'+fmt(c.net*.05)+'</td></tr>'
+      +'<tr><td>Report \u00e0 nouveau</td><td class="right-align">'+fmt(c.net*.95)+'</td></tr>';
+  }else{
+    affectation='<tr><td>D\u00e9ficit report\u00e9</td><td class="right-align" style="color:#DC3545">'+fmt(Math.abs(c.net))+'</td></tr>';
+  }
+  const html='<div class="doc-header"><div class="left"><h1>Proc\u00e8s-Verbal d\'Assembl\u00e9e G\u00e9n\u00e9rale</h1><div class="subtitle">Assembl\u00e9e G\u00e9n\u00e9rale Ordinaire Annuelle</div></div>'
+    +'<div class="right"><div class="company-name">'+(company.nom||t.l)+'</div><div>'+t.f+'</div><div>Capital : '+fmt(company.capital||0)+'</div><div>SIREN : '+(company.siren||'N/A')+'</div><div>'+(company.adresse||'')+'</div></div></div>'
+    +'<div class="section"><div class="section-title">En-t\u00eate</div>'
+    +'<div class="legal-text">'
+    +'<p>L\'an '+exercice+', le '+dateStr+',</p>'
+    +'<p style="margin-top:8px">Les associ\u00e9s de la soci\u00e9t\u00e9 <strong>'+(company.nom||t.l)+'</strong>, '+t.f+' au capital de '+fmt(company.capital||0)+', '
+    +'dont le si\u00e8ge social est situ\u00e9 \u00e0 '+(company.adresse||'[adresse du si\u00e8ge social]')+', '
+    +'immatricul\u00e9e au RCS sous le num\u00e9ro SIREN '+(company.siren||'[SIREN]')+', '
+    +'se sont r\u00e9unis en Assembl\u00e9e G\u00e9n\u00e9rale Ordinaire Annuelle.</p>'
+    +'<p style="margin-top:8px">'+t.dir+' : <strong>'+(company.dirigeant||'[Nom du dirigeant]')+'</strong></p>'
+    +'</div></div>'
+    +'<div class="section"><div class="section-title">Ordre du Jour</div>'
+    +'<div class="legal-text"><ol style="padding-left:20px;line-height:2">'
+    +'<li>Approbation des comptes de l\'exercice clos le 31/12/'+(exercice-1)+'</li>'
+    +'<li>Affectation du r\u00e9sultat</li>'
+    +'<li>Quitus au '+t.dir+'</li>'
+    +'<li>Pouvoirs pour les formalit\u00e9s</li>'
+    +'</ol></div></div>'
+    +'<div class="section"><div class="section-title">Premi\u00e8re R\u00e9solution &mdash; Approbation des comptes</div>'
+    +'<div class="legal-text"><p>L\'Assembl\u00e9e G\u00e9n\u00e9rale, apr\u00e8s avoir entendu la lecture du rapport de gestion du '+t.dir+', '
+    +'approuve les comptes de l\'exercice clos le 31 d\u00e9cembre '+(exercice-1)+' tels qu\'ils lui ont \u00e9t\u00e9 pr\u00e9sent\u00e9s, '
+    +'faisant appara\u00eetre les r\u00e9sultats suivants :</p></div>'
+    +'<table><thead><tr><th>Poste</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +'<tr><td>Chiffre d\'affaires HT</td><td class="right-align">'+fmt(c.ca)+'</td></tr>'
+    +'<tr><td>Total des charges</td><td class="right-align">'+fmt(c.dep+c.rem+c.chg)+'</td></tr>'
+    +'<tr><td>R\u00e9sultat avant imp\u00f4t</td><td class="right-align">'+fmt(c.ben)+'</td></tr>'
+    +'<tr><td>Imp\u00f4t sur les soci\u00e9t\u00e9s</td><td class="right-align">'+fmt(c.is)+'</td></tr>'
+    +'<tr class="total-row"><td>R\u00e9sultat net</td><td class="right-align">'+fmt(c.net)+'</td></tr>'
+    +'</tbody></table>'
+    +'<div class="legal-text"><p><em>Cette r\u00e9solution est adopt\u00e9e \u00e0 l\'unanimit\u00e9.</em></p></div></div>'
+    +'<div class="section"><div class="section-title">Deuxi\u00e8me R\u00e9solution &mdash; Affectation du r\u00e9sultat</div>'
+    +'<div class="legal-text"><p>L\'Assembl\u00e9e G\u00e9n\u00e9rale d\u00e9cide d\'affecter le r\u00e9sultat de l\'exercice de la mani\u00e8re suivante '
+    +'(conform\u00e9ment \u00e0 l\'article L. 232-10 du Code de commerce) :</p></div>'
+    +'<table><thead><tr><th>Affectation</th><th class="right-align">Montant</th></tr></thead><tbody>'
+    +affectation
+    +'</tbody></table>'
+    +'<div class="legal-text"><p><em>Cette r\u00e9solution est adopt\u00e9e \u00e0 l\'unanimit\u00e9.</em></p></div></div>'
+    +'<div class="section"><div class="section-title">Troisi\u00e8me R\u00e9solution &mdash; Quitus</div>'
+    +'<div class="legal-text"><p>L\'Assembl\u00e9e G\u00e9n\u00e9rale donne quitus au '+t.dir+' pour sa gestion au cours de l\'exercice \u00e9coul\u00e9.</p>'
+    +'<p><em>Cette r\u00e9solution est adopt\u00e9e \u00e0 l\'unanimit\u00e9.</em></p></div></div>'
+    +'<div class="section"><div class="section-title">Quatri\u00e8me R\u00e9solution &mdash; Pouvoirs</div>'
+    +'<div class="legal-text"><p>L\'Assembl\u00e9e G\u00e9n\u00e9rale conf\u00e8re tous pouvoirs au porteur d\'une copie ou d\'un extrait du pr\u00e9sent '
+    +'proc\u00e8s-verbal pour accomplir toutes les formalit\u00e9s l\u00e9gales.</p>'
+    +'<p><em>Cette r\u00e9solution est adopt\u00e9e \u00e0 l\'unanimit\u00e9.</em></p></div></div>'
+    +'<div class="signature-block">'
+    +'<div class="sig">Le '+t.dir+'<br><br><br><br><strong>'+(company.dirigeant||'[Nom]')+'</strong></div>'
+    +'<div class="sig">Pour les associ\u00e9s<br><br><br><br><strong>Signature</strong></div>'
+    +'</div>';
+  openDocWindow('PV AG - '+(company.nom||t.l),html);
 };
 
 window.dlCSV=()=>{
@@ -1980,16 +2257,210 @@ function renderVeille(el){
 // ============ SIMULATEURS ============
 function renderSimul(el){
   const t=(TYPES[company?.type]||TYPES.SAS);
-  el.innerHTML=`<div class="top"><h2>📊 Simulateur Rémunération vs Dividendes</h2></div>
+  const isSARLEURL=(company?.type==='SARL'||company?.type==='EURL');
+  const capital=company?.capital||0;
+  const seuil10=capital*0.10;
+
+  el.innerHTML=`<div class="top"><h2>📊 Simulateurs</h2></div>
+
+  <div class="tabs" style="margin-bottom:20px">
+    <div class="tab ${(window._simulTab||'dividendes')==='dividendes'?'on':''}" onclick="window._simulTab='dividendes';renderPage()">💰 Simulateur Dividendes</div>
+    <div class="tab ${window._simulTab==='remvsdiv'?'on':''}" onclick="window._simulTab='remvsdiv';renderPage()">⚖️ Rem. vs Dividendes</div>
+  </div>
+
+  ${(window._simulTab||'dividendes')==='dividendes'?`
+  <!-- SIMULATEUR DIVIDENDES -->
+  <div class="cd" style="margin-bottom:16px;border-left:3px solid var(--acc)">
+    <div class="cd-t">💰 Simulateur de dividendes — ${t.l}</div>
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">${isSARLEURL
+      ?'SARL/EURL : PFU 30% sous le seuil de 10% du capital, charges sociales ~45% au-dessus'
+      :'SAS/SASU : PFU 30% (flat tax) — pas de charges sociales sur les dividendes'}</div>
+
+    <div class="fg"><label>Montant brut de dividendes (EUR)</label>
+      <input class="inp" type="range" id="sDivBrut" min="0" max="200000" step="500" value="${window._divBrut||20000}" oninput="window._divBrut=+this.value;document.getElementById('sDivBrutVal').value=this.value;updateDivSimul()" style="padding:4px 0;accent-color:var(--acc)">
+      <input class="inp" type="number" id="sDivBrutVal" value="${window._divBrut||20000}" oninput="window._divBrut=+this.value;document.getElementById('sDivBrut').value=this.value;updateDivSimul()" style="margin-top:6px;font-size:18px;font-weight:800;text-align:center">
+    </div>
+
+    ${isSARLEURL?`
+    <div class="al al-w" style="margin-bottom:14px">
+      <span>⚠️</span><span>Capital social : <b>${fmt(capital)}</b> — Seuil 10% : <b>${fmt(seuil10)}</b>/an. Au-dessus, charges sociales TNS ~45%.</span>
+    </div>`:`
+    <div class="al al-s" style="margin-bottom:14px">
+      <span>✅</span><span>${t.l} : tous les dividendes sont soumis uniquement a la flat tax 30%. Pas de charges sociales.</span>
+    </div>`}
+
+    <div class="fg"><label>Option fiscale</label>
+      <select class="inp" id="sDivOption" onchange="updateDivSimul()">
+        <option value="pfu">PFU — Prelevement Forfaitaire Unique (30%)</option>
+        <option value="bareme">Bareme progressif IR (avec abattement 40%)</option>
+      </select>
+    </div>
+    ${`<div class="fg" id="sDivTrancheWrap" style="display:none"><label>Tranche marginale IR</label>
+      <select class="inp" id="sDivTranche" onchange="updateDivSimul()">
+        <option value="0">0%</option>
+        <option value="11">11%</option>
+        <option value="30" selected>30%</option>
+        <option value="41">41%</option>
+        <option value="45">45%</option>
+      </select></div>`}
+  </div>
+
+  <div id="divSimulRes"></div>
+  `:`
+  <!-- SIMULATEUR REM VS DIV -->
   <div class="gr g2">
-    <div class="cd"><div class="cd-t">Paramètres</div>
-      <div class="fg"><label>Rémunération brute/mois</label><input class="inp" type="number" id="sRem" value="${company?.rem||3000}" oninput="updateSimul()"></div>
+    <div class="cd"><div class="cd-t">Parametres</div>
+      <div class="fg"><label>Remuneration brute/mois</label><input class="inp" type="number" id="sRem" value="${company?.rem||3000}" oninput="updateSimul()"></div>
       <div class="fg"><label>Dividendes annuels</label><input class="inp" type="number" id="sDiv" value="20000" oninput="updateSimul()"></div>
-      <div class="al al-i">${t.divCh?`⚠️ ${t.l}: charges sociales sur dividendes > 10% capital`:`✅ ${t.l}: pas de charges sur dividendes`}</div>
+      <div class="al al-i">${t.divCh?'⚠️ '+t.l+': charges sociales sur dividendes > 10% capital':'✅ '+t.l+': pas de charges sur dividendes'}</div>
     </div>
     <div class="cd" id="simulRes"></div>
+  </div>
+  `}`;
+
+  if((window._simulTab||'dividendes')==='dividendes'){
+    setTimeout(()=>updateDivSimul(),20);
+  }else{
+    setTimeout(()=>updateSimul(),20);
+  }
+};
+
+window.updateDivSimul=()=>{
+  const t=(TYPES[company?.type]||TYPES.SAS);
+  const isSARLEURL=(company?.type==='SARL'||company?.type==='EURL');
+  const capital=company?.capital||0;
+  const seuil10=capital*0.10;
+  const brut=+(document.getElementById('sDivBrut')?.value||0);
+  const option=document.getElementById('sDivOption')?.value||'pfu';
+  const tranche=+(document.getElementById('sDivTranche')?.value||30);
+  const trancheWrap=document.getElementById('sDivTrancheWrap');
+  if(trancheWrap)trancheWrap.style.display=option==='bareme'?'block':'none';
+
+  let ps=0,ir=0,chargesSoc=0,net=0;
+  let psBareme=0,irBareme=0,csBareme=0,netBareme=0;
+
+  if(option==='pfu'){
+    // PFU: 17.2% PS + 12.8% IR = 30%
+    ps=brut*0.172;
+    ir=brut*0.128;
+    if(isSARLEURL){
+      const sousSeuil=Math.min(brut,seuil10);
+      const auDessus=Math.max(0,brut-seuil10);
+      chargesSoc=auDessus*0.45;
+      // PS only on sous-seuil part, charges sociales on the rest
+      ps=sousSeuil*0.172;
+      ir=sousSeuil*0.128;
+      // au-dessus: no PFU, just charges sociales
+      net=sousSeuil*(1-0.30)+(auDessus-chargesSoc);
+    }else{
+      chargesSoc=0;
+      net=brut-ps-ir;
+    }
+  }else{
+    // Bareme progressif: abattement 40%, puis IR a la tranche marginale
+    const assiette=brut*0.60; // apres abattement 40%
+    ps=brut*0.172; // PS toujours sur le brut
+    ir=assiette*(tranche/100);
+    if(isSARLEURL){
+      const sousSeuil=Math.min(brut,seuil10);
+      const auDessus=Math.max(0,brut-seuil10);
+      chargesSoc=auDessus*0.45;
+      ps=sousSeuil*0.172;
+      ir=sousSeuil*0.60*(tranche/100);
+      net=sousSeuil-sousSeuil*0.172-sousSeuil*0.60*(tranche/100)+(auDessus-chargesSoc);
+    }else{
+      chargesSoc=0;
+      net=brut-ps-ir;
+    }
+  }
+
+  // Compare PFU vs bareme
+  const pfuNet=isSARLEURL
+    ?(Math.min(brut,seuil10)*0.70+Math.max(0,brut-seuil10)*0.55)
+    :(brut*0.70);
+  const baremeNet30=isSARLEURL
+    ?(Math.min(brut,seuil10)*(1-0.172-0.60*0.30)+Math.max(0,brut-seuil10)*0.55)
+    :(brut*(1-0.172-0.60*0.30));
+
+  const totalPrelevements=ps+ir+chargesSoc;
+  if(!isSARLEURL||option==='pfu'){
+    net=brut-totalPrelevements;
+  }
+
+  const el=document.getElementById('divSimulRes');if(!el)return;
+
+  // Bar chart percentages
+  const pctPS=brut>0?(ps/brut*100):0;
+  const pctIR=brut>0?(ir/brut*100):0;
+  const pctCS=brut>0?(chargesSoc/brut*100):0;
+  const pctNet=brut>0?(Math.max(0,net)/brut*100):0;
+
+  el.innerHTML=`
+  <div class="gr g2">
+    <div class="cd">
+      <div class="cd-t">Decomposition ${option==='pfu'?'PFU (Flat Tax)':'Bareme progressif'}</div>
+
+      <!-- Visual breakdown bar -->
+      <div style="margin:16px 0;border-radius:8px;overflow:hidden;height:36px;display:flex;font-size:10px;font-weight:700;color:#fff">
+        ${pctPS>0?`<div style="width:${pctPS}%;background:#2563EB;display:flex;align-items:center;justify-content:center;min-width:${pctPS>5?'0':'30px'}">${pctPS>5?fmtP(pctPS/100):''}</div>`:''}
+        ${pctIR>0?`<div style="width:${pctIR}%;background:#7C3AED;display:flex;align-items:center;justify-content:center;min-width:${pctIR>5?'0':'30px'}">${pctIR>5?fmtP(pctIR/100):''}</div>`:''}
+        ${pctCS>0?`<div style="width:${pctCS}%;background:#DC3545;display:flex;align-items:center;justify-content:center;min-width:${pctCS>5?'0':'30px'}">${pctCS>5?fmtP(pctCS/100):''}</div>`:''}
+        <div style="width:${pctNet}%;background:#0A6847;display:flex;align-items:center;justify-content:center">${pctNet>8?fmtP(pctNet/100):''}</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;font-size:10px">
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#2563EB;border-radius:2px;display:inline-block"></span> PS (17,2%)</span>
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#7C3AED;border-radius:2px;display:inline-block"></span> IR ${option==='pfu'?'(12,8%)':'(bareme '+tranche+'%)'}</span>
+        ${pctCS>0?'<span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#DC3545;border-radius:2px;display:inline-block"></span> Charges soc. TNS</span>':''}
+        <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;background:#0A6847;border-radius:2px;display:inline-block"></span> Net en poche</span>
+      </div>
+
+      <!-- Detail table -->
+      <table><tbody>
+        <tr><td style="font-weight:600">Dividendes bruts</td><td style="text-align:right;font-weight:800;font-size:16px">${fmt(brut)}</td></tr>
+        <tr><td>Prelevements sociaux (17,2%)</td><td style="text-align:right;color:var(--blu);font-weight:600">- ${fmt(ps)}</td></tr>
+        <tr><td>Impot sur le revenu ${option==='pfu'?'(12,8%)':'('+tranche+'% sur 60%)'}</td><td style="text-align:right;color:var(--pur);font-weight:600">- ${fmt(ir)}</td></tr>
+        ${chargesSoc>0?`<tr><td>Charges sociales TNS (~45%)<br><span style="font-size:10px;color:var(--tx3)">Sur ${fmt(Math.max(0,brut-seuil10))} au-dessus du seuil 10%</span></td><td style="text-align:right;color:var(--red);font-weight:600">- ${fmt(chargesSoc)}</td></tr>`:''}
+        <tr style="border-top:2px solid var(--acc);background:var(--bg3)"><td style="font-weight:800;font-size:14px">Net en poche</td><td style="text-align:right;font-weight:900;font-size:20px;color:var(--grn)">${fmt(Math.max(0,net))}</td></tr>
+        <tr><td style="color:var(--tx3)">Taux effectif de prelevement</td><td style="text-align:right;font-weight:700;color:var(--org)">${brut>0?fmtP(totalPrelevements/brut):'0%'}</td></tr>
+      </tbody></table>
+    </div>
+
+    <div class="cd">
+      <div class="cd-t">Comparaison PFU vs Bareme</div>
+      <div style="margin-top:8px">
+        <!-- PFU bar -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:6px">PFU (Flat Tax 30%)</div>
+          <div style="display:flex;height:28px;border-radius:6px;overflow:hidden;margin-bottom:4px">
+            <div style="width:${brut>0?((brut-pfuNet)/brut*100):30}%;background:rgba(220,53,69,.3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--red)">-${fmt(brut-pfuNet)}</div>
+            <div style="width:${brut>0?(pfuNet/brut*100):70}%;background:rgba(10,104,71,.15);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--grn)">${fmt(pfuNet)}</div>
+          </div>
+        </div>
+
+        <!-- Bareme bar (30%) -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;font-weight:700;margin-bottom:6px">Bareme progressif (TMI 30%)</div>
+          <div style="display:flex;height:28px;border-radius:6px;overflow:hidden;margin-bottom:4px">
+            <div style="width:${brut>0?((brut-baremeNet30)/brut*100):30}%;background:rgba(124,58,237,.2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--pur)">-${fmt(brut-baremeNet30)}</div>
+            <div style="width:${brut>0?(baremeNet30/brut*100):70}%;background:rgba(10,104,71,.15);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--grn)">${fmt(baremeNet30)}</div>
+          </div>
+        </div>
+
+        <div class="al ${pfuNet>=baremeNet30?'al-s':'al-i'}" style="margin-top:12px">
+          <span>${pfuNet>=baremeNet30?'✅':'💡'}</span>
+          <span>${pfuNet>=baremeNet30
+            ?'Le PFU est plus avantageux pour toi (+'+(fmt(pfuNet-baremeNet30))+' net). C\'est le cas general quand ta TMI est >= 30%.'
+            :'Le bareme progressif serait plus avantageux (+'+(fmt(baremeNet30-pfuNet))+' net). Option a indiquer sur ta declaration 2042.'}</span>
+        </div>
+
+        ${isSARLEURL?`
+        <div class="al al-w" style="margin-top:8px">
+          <span>💡</span>
+          <span><b>Astuce SARL/EURL</b> : augmente ton capital par incorporation de reserves pour monter le seuil de 10% (actuellement ${fmt(seuil10)}). Pas de sortie de cash.</span>
+        </div>`:''}
+      </div>
+    </div>
   </div>`;
-  updateSimul();
 };
 
 window.updateSimul=()=>{
@@ -1998,15 +2469,15 @@ window.updateSimul=()=>{
   const chgP=rem*t.cp;const chgS=rem*t.cs;const netRem=rem-chgS;const coutRem=rem+chgP;
   const divPFU=div*(1-F.PFU);
   const el=$('#simulRes');if(!el)return;
-  el.innerHTML=`<div class="cd-t">Résultat</div>
-  <table><thead><tr><th></th><th>Rémunération</th><th>Dividendes</th></tr></thead><tbody>
+  el.innerHTML=`<div class="cd-t">Resultat</div>
+  <table><thead><tr><th></th><th>Remuneration</th><th>Dividendes</th></tr></thead><tbody>
   <tr><td>Brut annuel</td><td style="font-weight:600">${fmt(rem)}</td><td style="font-weight:600">${fmt(div)}</td></tr>
-  <tr><td>Charges sociales</td><td style="color:var(--red)">${fmt(chgP+chgS)}</td><td style="color:var(--grn)">${t.divCh?fmt(div*.45):'0 €'}</td></tr>
-  <tr style="background:var(--bg)"><td style="font-weight:700">Net perçu</td><td style="font-weight:800;color:var(--grn)">${fmt(netRem)}</td><td style="font-weight:800;color:var(--grn)">${fmt(t.divCh?div*.55:divPFU)}</td></tr>
-  <tr><td style="font-weight:700">Coût SAS</td><td style="font-weight:700;color:var(--org)">${fmt(coutRem)}</td><td style="font-weight:700;color:var(--org)">${fmt(div)}</td></tr>
+  <tr><td>Charges sociales</td><td style="color:var(--red)">${fmt(chgP+chgS)}</td><td style="color:var(--grn)">${t.divCh?fmt(div*.45):'0 EUR'}</td></tr>
+  <tr style="background:var(--bg)"><td style="font-weight:700">Net percu</td><td style="font-weight:800;color:var(--grn)">${fmt(netRem)}</td><td style="font-weight:800;color:var(--grn)">${fmt(t.divCh?div*.55:divPFU)}</td></tr>
+  <tr><td style="font-weight:700">Cout societe</td><td style="font-weight:700;color:var(--org)">${fmt(coutRem)}</td><td style="font-weight:700;color:var(--org)">${fmt(div)}</td></tr>
   </tbody></table>
   <div style="margin-top:14px;padding:12px;background:var(--bg);border-radius:8px;text-align:center">
-    <div style="font-size:12px;color:var(--tx3)">Total net combiné</div>
+    <div style="font-size:12px;color:var(--tx3)">Total net combine</div>
     <div style="font-size:26px;font-weight:900;color:var(--acc2);margin-top:4px">${fmt(netRem+(t.divCh?div*.55:divPFU))}</div>
   </div>`;
 };
@@ -2443,6 +2914,7 @@ render=function(){
       ${navItem('simul','📊','Simulateurs')}
       ${navItem('statuts','📜','Statuts & Docs')}
       ${navItem('settings','⚙️','Parametres')}
+      ${navItem('urgence','🆘','Mode Urgence')}
     </nav>
     <div class="side-foot">FiscaPro v3.0 — 2025/2026<br>⚠️ Ne remplace pas un expert-comptable</div>
   </div>
@@ -2471,6 +2943,7 @@ renderPage=function(){
     case'statuts':renderStatuts(pg);break;
     case'settings':renderSettings(pg);break;
     case'import':renderImportBancaire(pg);break;
+    case'urgence':renderUrgence(pg);break;
   }
 };
 
