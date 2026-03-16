@@ -1255,83 +1255,73 @@ function renderOpti(el){
   el.innerHTML=`
   <div class="top"><div><h2>⭐ Optimisation 360°</h2><div class="top-s">Analyse personnalisée pour ${company.nom||t.l} (${t.l})</div></div></div>
 
-  <!-- SCORE CARD -->
-  <div class="cd" style="background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(168,85,247,.06));border-color:rgba(99,102,241,.2);margin-bottom:20px">
-    <div class="gr g4" style="align-items:center">
-      <div style="text-align:center;padding:12px">
-        <div style="position:relative;width:90px;height:90px;margin:0 auto">
-          <svg viewBox="0 0 36 36" style="width:90px;height:90px;transform:rotate(-90deg)">
-            <circle cx="18" cy="18" r="15.91" fill="none" stroke="var(--bg4)" stroke-width="2.5"/>
-            <circle cx="18" cy="18" r="15.91" fill="none" stroke="${scoreColor}" stroke-width="2.5" stroke-dasharray="${score} ${100-score}" stroke-linecap="round"/>
-          </svg>
-          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;color:${scoreColor}">${score}%</div>
-        </div>
-        <div style="font-size:11px;color:var(--tx3);margin-top:6px">Score opti</div>
+  <!-- SCORE -->
+  <div class="cd" style="border-left:3px solid var(--acc);margin-bottom:20px">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:28px;font-weight:900;color:var(--grn)">${fmt(totalSv)}<span style="font-size:14px;font-weight:600">/an</span></div>
+        <div style="font-size:12px;color:var(--tx3);margin-top:2px">d'economies potentielles identifiees</div>
+        <div style="height:4px;background:var(--bg4);border-radius:2px;margin-top:8px"><div style="height:100%;width:${score}%;background:var(--acc);border-radius:2px"></div></div>
+        <div style="font-size:10px;color:var(--tx3);margin-top:4px">${eligible.length} dispositifs eligibles sur ${allItems.length} analyses</div>
       </div>
-      <div class="kpi"><div class="kpi-v" style="color:var(--grn)">${eligible.length}</div><div class="kpi-l">Dispositifs éligibles</div></div>
-      <div class="kpi"><div class="kpi-v" style="color:var(--grn)">${fmt(totalSv)}</div><div class="kpi-l">Économies estimées/an</div></div>
-      <div class="kpi"><div class="kpi-v" style="color:var(--tx3)">${nonEligible.length}</div><div class="kpi-l">Non applicables</div></div>
+      <button class="bt bt-p" onclick="goTo('assistant')">💬 Demander a l'IA</button>
     </div>
   </div>
 
-  <!-- PROFIL RÉSUMÉ -->
-  <div class="al al-i" style="margin-bottom:20px">
-    <span>🎯</span><span>Analyse basée sur : <b>${company.nom||'Ma société'}</b> — ${t.l} (${t.f}) — ${isIS?'IS':'IR'} — ${isExoneree?'Exonéré TVA':isFranchise?'Franchise TVA':'Assujetti TVA'} — ${t.social} — CA ${fmt(c.ca)} — ${age.toFixed(1)} ans — ${nbSal} salarié${nbSal!==1?'s':''}<br>
-    <a href="#" onclick="goTo('settings');return false" style="color:var(--acc)">Modifier ces paramètres →</a></span>
+  <!-- TABS PAR CATEGORIE -->
+  <div class="tabs" style="margin-bottom:16px">
+    ${cats.map((cat,ci)=>`<div class="tab ${(window._optiCat||0)===ci?'on':''}" onclick="window._optiCat=${ci};renderOpti($('#page'))">${cat.icon}<span class="hide-mob"> ${cat.label.split(' ')[0]}</span></div>`).join('')}
   </div>
 
-  <!-- FILTRES -->
-  <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
-    <button class="bt ${!window._optiFilter?'bt-p':'bt-s'} sm" onclick="window._optiFilter=null;renderOpti($('#page'))">Tout (${allItems.length})</button>
-    <button class="bt ${window._optiFilter==='eligible'?'bt-p':'bt-s'} sm" onclick="window._optiFilter='eligible';renderOpti($('#page'))">✅ Éligibles (${eligible.length})</button>
-    <button class="bt ${window._optiFilter==='money'?'bt-p':'bt-s'} sm" onclick="window._optiFilter='money';renderOpti($('#page'))">💰 Avec économie chiffrée</button>
-    <button class="bt ${window._optiFilter==='hidden'?'bt-p':'bt-s'} sm" onclick="window._optiFilter='hidden';renderOpti($('#page'))">💡 Astuces peu connues</button>
-  </div>
-
-  ${cats.map(cat=>{
-    let items=cat.items;
-    if(window._optiFilter==='eligible')items=items.filter(i=>i.ok);
-    if(window._optiFilter==='money')items=items.filter(i=>i.ok&&i.sv>0);
-    if(window._optiFilter==='hidden')items=items.filter(i=>i.tags.some(t=>t.includes('connu')||t.includes('Exonéré')));
-    if(items.length===0)return'';
-
-    const catEligible=items.filter(i=>i.ok).length;
-    const catSv=items.filter(i=>i.ok).reduce((s,i)=>s+(i.sv||0),0);
+  ${(()=>{
+    const cat=cats[window._optiCat||0];
+    const items=cat.items;
+    const catEligible=items.filter(i=>i.ok);
+    const catNon=items.filter(i=>!i.ok);
+    const catSv=catEligible.reduce((s,i)=>s+(i.sv||0),0);
     return`
-    <div style="margin-bottom:28px">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:10px 14px;background:var(--bg2);border-radius:10px;border:1px solid var(--brd)">
-        <span style="font-size:28px">${cat.icon}</span>
-        <div style="flex:1">
-          <div style="font-size:16px;font-weight:800;color:${cat.color}">${cat.label}</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:2px">${cat.desc}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:20px;font-weight:900;color:var(--grn)">${catEligible}/${items.length}</div>
-          ${catSv>0?`<div style="font-size:12px;font-weight:700;color:var(--grn)">+${fmt(catSv)}/an</div>`:''}
+    <div class="cd" style="margin-bottom:12px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <span style="font-size:24px">${cat.icon}</span>
+        <div>
+          <div style="font-size:16px;font-weight:800">${cat.label}</div>
+          <div style="font-size:11px;color:var(--tx3)">${cat.desc}</div>
         </div>
       </div>
-      ${items.map((o,i)=>`
-        <div class="opti ${o.ok?'el':''}" style="${!o.ok?'opacity:.65;border-left:3px solid var(--org)':''}" onclick="toggleOptiDetail('${cat.id}_${i}')">
-          <div style="display:flex;justify-content:space-between;align-items:start;gap:10px">
-            <div style="flex:1">
-              <div style="font-size:14px;font-weight:700;margin-bottom:4px">${o.ok?'✅':'⚠️'} ${o.t}</div>
-              ${!o.ok&&o.why?`<div style="font-size:10px;color:var(--org);margin-bottom:4px">↳ ${o.why}</div>`:''}
-            </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
-              ${o.sv>0?`<div style="padding:4px 10px;background:rgba(16,185,129,.12);border-radius:6px;font-weight:800;color:var(--grn);font-size:13px">+${fmt(o.sv)}/an</div>`:''}
-              <span class="tg ${o.ok?'t-grn':'t-org'}" style="font-size:11px">${o.ok?'Éligible':'Non applicable'}</span>
+      ${catSv>0?`<div style="font-size:13px;font-weight:700;color:var(--grn);margin-top:6px">Economies estimees : +${fmt(catSv)}/an</div>`:''}
+    </div>
+
+    ${catEligible.length>0?`
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--grn);margin-bottom:8px;padding-left:4px">✅ Eligible pour ${company.nom||'ta societe'} (${catEligible.length})</div>
+      ${catEligible.map((o,i)=>`
+        <div class="cd" style="padding:0;margin-bottom:8px;overflow:hidden;cursor:pointer;border-left:3px solid var(--grn)" onclick="toggleOptiDetail('${cat.id}_e${i}')">
+          <div style="padding:12px 14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+              <div style="font-size:13px;font-weight:700;flex:1">${o.t}</div>
+              <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+                ${o.sv>0?`<span style="padding:3px 8px;background:rgba(10,104,71,.08);border-radius:5px;font-weight:800;color:var(--grn);font-size:12px">+${fmt(o.sv)}</span>`:''}
+                <span style="font-size:14px;color:var(--tx3);transition:transform .2s" id="optiChev_${cat.id}_e${i}">▸</span>
+              </div>
             </div>
           </div>
-          <div style="font-size:12px;color:var(--tx2);margin-top:8px;line-height:1.7;background:var(--bg);padding:12px 14px;border-radius:8px">${o.simple}</div>
-          <div id="optiDetail_${cat.id}_${i}" class="hide" style="font-size:11px;color:var(--tx3);margin-top:8px;padding:10px 14px;background:rgba(99,102,241,.04);border-radius:8px;border-left:3px solid var(--acc);line-height:1.7">
-            <b>📐 Détails techniques :</b><br>${o.detail}
-          </div>
-          <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">${o.tags.map(tg=>`<span class="tg t-blu">${tg}</span>`).join('')}
-            <span class="tg t-pur" style="margin-left:auto;cursor:pointer;font-size:10px">▼ Détails</span>
+          <div id="optiDetail_${cat.id}_e${i}" class="hide" style="padding:0 14px 14px;border-top:1px solid var(--brd)">
+            <div style="font-size:12px;color:var(--tx2);line-height:1.7;padding-top:10px">${o.simple}</div>
+            <div style="font-size:11px;color:var(--tx3);margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:6px;line-height:1.6"><b>Details :</b> ${o.detail}</div>
+            <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap">${o.tags.map(tg=>`<span class="tg t-blu">${tg}</span>`).join('')}</div>
           </div>
         </div>`).join('')}
-    </div>`;
-  }).join('')}`;
+    </div>`:''}
+
+    ${catNon.length>0?`
+    <div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3);margin-bottom:8px;padding-left:4px">Non applicable (${catNon.length})</div>
+      ${catNon.map((o,i)=>`
+        <div class="cd" style="padding:10px 14px;margin-bottom:6px;opacity:.5;border-left:3px solid var(--bg4)">
+          <div style="font-size:12px;font-weight:600;color:var(--tx3)">${o.t}</div>
+          ${o.why?`<div style="font-size:10px;color:var(--org);margin-top:2px">${o.why}</div>`:''}
+        </div>`).join('')}
+    </div>`:''}`})()}`;
 }
 
 window.toggleOptiDetail=(id)=>{
