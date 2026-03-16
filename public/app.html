@@ -2933,28 +2933,10 @@ function buildSuggestions(){
 }
 
 function renderAssistant(el){
-  const hasKey=!!aiKey;
   el.innerHTML=`
-  <div class="top" style="margin-bottom:12px"><div><h2>💬 Mon Comptable IA</h2><div class="top-s">Expert-comptable + Inspecteur des impôts + Avocat fiscaliste</div></div>
-  ${hasKey?`<button class="bt bt-s sm" onclick="aiMessages=[];save('aiMessages',[]);renderPage()">Nouveau chat</button>`:''}
+  <div class="top" style="margin-bottom:12px"><div><h2>💬 Mon Expert IA</h2><div class="top-s">Expert-comptable + Inspecteur des impots + Avocat fiscaliste</div></div>
+  <button class="bt bt-s sm" onclick="aiMessages=[];save('aiMessages',[]);renderPage()">Nouveau chat</button>
   </div>
-
-  ${!hasKey?`
-  <div class="cd" style="text-align:center;padding:30px">
-    <div style="font-size:48px;margin-bottom:12px">🤖</div>
-    <div style="font-size:16px;font-weight:800;margin-bottom:8px">Configure ton assistant IA</div>
-    <p style="color:var(--tx3);font-size:13px;margin-bottom:16px;line-height:1.6">
-      Pour utiliser l'assistant, tu as besoin d'une clé API Anthropic (Claude).<br>
-      Va sur <b>console.anthropic.com</b> → API Keys → Créer une clé.<br>
-      Ta clé reste sur ton appareil, jamais envoyée ailleurs qu'à Anthropic.
-    </p>
-    <div class="fg" style="max-width:400px;margin:0 auto"><label>Clé API Anthropic</label>
-    <input class="inp" type="password" id="aiKeyInput" placeholder="sk-ant-..." style="text-align:center"></div>
-    <button class="bt bt-p" onclick="const k=$('#aiKeyInput').value.trim();if(k.startsWith('sk-ant')){aiKey=k;save('aiKey',k);renderPage();}else{alert('La clé doit commencer par sk-ant...');}">Activer l'assistant</button>
-    <div style="margin-top:16px">
-      <div class="al al-i"><span>🔒</span><span>Ta clé API est stockée <b>uniquement dans ton navigateur</b> (localStorage). Elle n'est jamais envoyée à un serveur tiers — seulement à l'API Anthropic directement.</span></div>
-    </div>
-  </div>`:`
 
   <div class="cd" style="padding:12px">
     <div class="chat-box">
@@ -2976,9 +2958,7 @@ function renderAssistant(el){
       </div>
     </div>
   </div>
-  <div style="display:flex;justify-content:flex-end;margin-top:6px">
-    <button class="bt bt-s sm" onclick="if(confirm('Supprimer la clé API ?')){aiKey='';save('aiKey','');aiMessages=[];save('aiMessages',[]);renderPage();}">Déconnecter l'IA</button>
-  </div>`}`;
+  <div class="al al-i" style="margin-top:8px"><span>🧠</span><span>L'agent utilise des <b>outils</b> : simulation salaire/dividendes, calcul IS, generation de documents, optimisation. Il agit, pas juste parler.</span></div>`;
 
   // Scroll to bottom
   setTimeout(()=>{const m=$('#chatMsgs');if(m)m.scrollTop=m.scrollHeight;},50);
@@ -3014,25 +2994,33 @@ window.askAI=async(question)=>{
   try{
     const context=getCompanyContext();
     const apiMessages=aiMessages.map(m=>({role:m.role==='user'?'user':'assistant',content:m.content}));
+    let answer='';
 
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':aiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:2048,
-        system:AI_SYSTEM+'\n\n'+context,
-        messages:apiMessages
-      })
-    });
+    // Try server-side agent first (has tools), fallback to direct API
+    const serverUrl=window.location.origin+'/api/agent';
+    let useServer=true;
+    try{
+      const res=await fetch(serverUrl,{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({messages:apiMessages,context})
+      });
+      if(res.ok){const data=await res.json();answer=data.answer||'Pas de reponse.';}
+      else{useServer=false;}
+    }catch{useServer=false;}
 
-    if(!res.ok){
-      const err=await res.json().catch(()=>({}));
-      throw new Error(err.error?.message||`Erreur API (${res.status})`);
+    // Fallback: direct API call with user's key
+    if(!useServer){
+      if(!aiKey)throw new Error('Serveur indisponible et aucune cle API configuree.');
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':aiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-6',max_tokens:2048,system:AI_SYSTEM+'\n\n'+context,messages:apiMessages})
+      });
+      if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||'Erreur API ('+res.status+')');}
+      const data=await res.json();
+      answer=data.content?.[0]?.text||'Pas de reponse.';
     }
-
-    const data=await res.json();
-    const answer=data.content?.[0]?.text||'Pas de réponse.';
 
     aiMessages.push({role:'assistant',content:answer});
     save('aiMessages',aiMessages);
