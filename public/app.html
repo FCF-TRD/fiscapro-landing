@@ -4572,6 +4572,311 @@ function renderEmbauche(el){
 
 window.updateEmbauche=function(){renderEmbauche($('#page'));};
 
+// ============ PAIE & SALARIES ============
+function loadSalaries(){return load('salaries',[]);}
+function saveSalaries(arr){save('salaries',arr);}
+
+function renderPaie(el){
+  const salaries=loadSalaries();
+  const moisNoms=['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+  const now=new Date();
+  const moisCourant=moisNoms[now.getMonth()]+' '+now.getFullYear();
+
+  el.innerHTML=`
+  <div class="top"><div><h2>💰 Paie & salaires</h2><div class="top-s">Gestion des salaries et generation des fiches de paie — ${moisCourant}</div></div>
+  <div style="display:flex;gap:8px">
+    <button class="bt bt-p" onclick="addSalarie()">+ Ajouter un salarie</button>
+    ${salaries.length>0?'<button class="bt bt-g" onclick="genAllFiches()">📄 Generer toutes les fiches du mois</button>':''}
+  </div></div>
+
+  ${salaries.length===0?`
+  <div class="cd" style="text-align:center;padding:40px">
+    <div style="font-size:48px;margin-bottom:12px">👥</div>
+    <div style="font-size:16px;font-weight:800;margin-bottom:6px">Aucun salarie enregistre</div>
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:16px">Ajoute ton premier salarie pour generer des fiches de paie</div>
+    <button class="bt bt-p" onclick="addSalarie()">+ Ajouter un salarie</button>
+  </div>`:`
+  <div class="gr g3" style="margin-bottom:16px">
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--acc)">${salaries.length}</div><div class="kpi-l">Salaries</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--blu)">${fmt(salaries.reduce((s,e)=>s+(e.salaireBrut||0),0))}</div><div class="kpi-l">Masse salariale brute / mois</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--red)">${fmt(salaries.reduce((s,e)=>{var c=calcChargesPatronales(e.salaireBrut||0);return s+(e.salaireBrut||0)+c.total;},0))}</div><div class="kpi-l">Cout total employeur / mois</div></div>
+  </div>
+
+  <div class="cd">
+    <div class="cd-t">Liste des salaries</div>
+    <table>
+      <thead><tr><th>Nom</th><th>Poste</th><th>Contrat</th><th>Brut mensuel</th><th>Date embauche</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${salaries.map((s,i)=>`<tr>
+          <td><b>${s.nom} ${s.prenom}</b></td>
+          <td>${s.poste||'-'}</td>
+          <td><span class="tg ${s.typeContrat==='CDI'?'t-grn':s.typeContrat==='CDD'?'t-org':'t-blu'}">${s.typeContrat||'CDI'}</span></td>
+          <td style="font-weight:700">${fmt(s.salaireBrut)}</td>
+          <td>${fmtD(s.dateEmbauche)}</td>
+          <td>
+            <button class="bt bt-p sm" onclick="genFichePaie('${s.id}')">📄 Fiche de paie</button>
+            <button class="bt bt-d sm" onclick="delSalarie('${s.id}')">🗑️</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`}
+
+  <div class="al al-i" style="margin-top:12px"><span>💡</span><span>Les taux utilises correspondent aux taux 2026 standards. Pour des cas specifiques (cadres, tranches hautes), consulte ton expert-comptable. Le PAS est configurable par salarie.</span></div>`;
+}
+
+function calcChargesSalariales(brut){
+  var base=brut;
+  var maladie={l:'Securite sociale maladie',base:base,taux:0.004,montant:Math.round(base*0.004*100)/100};
+  var complSante={l:'Complementaire sante',base:base,taux:0.005,montant:Math.round(base*0.005*100)/100};
+  var vieillesseP={l:'Retraite Secu plafonnee',base:Math.min(base,3864),taux:0.069,montant:Math.round(Math.min(base,3864)*0.069*100)/100};
+  var vieillesseD={l:'Retraite Secu deplafonnee',base:base,taux:0.004,montant:Math.round(base*0.004*100)/100};
+  var complRetraite={l:'Complementaire retraite T1',base:Math.min(base,3864),taux:0.0315,montant:Math.round(Math.min(base,3864)*0.0315*100)/100};
+  var csgD={l:'CSG deductible',base:Math.round(base*0.9825*100)/100,taux:0.068,montant:Math.round(base*0.9825*0.068*100)/100};
+  var csgND={l:'CSG non deductible',base:Math.round(base*0.9825*100)/100,taux:0.024,montant:Math.round(base*0.9825*0.024*100)/100};
+  var crds={l:'CRDS',base:Math.round(base*0.9825*100)/100,taux:0.005,montant:Math.round(base*0.9825*0.005*100)/100};
+  var items=[maladie,complSante,vieillesseP,vieillesseD,complRetraite,csgD,csgND,crds];
+  var total=items.reduce(function(s,it){return s+it.montant;},0);
+  total=Math.round(total*100)/100;
+  return{items:items,total:total,csgDed:csgD.montant};
+}
+
+function calcChargesPatronales(brut){
+  var base=brut;
+  var SMIC_BRUT=1802;
+  var maladie={l:'Securite sociale maladie',base:base,taux:0.07,montant:Math.round(base*0.07*100)/100};
+  var complSante={l:'Complementaire sante',base:base,taux:0.0127,montant:Math.round(base*0.0127*100)/100};
+  var at={l:'Accidents du travail',base:base,taux:0.015,montant:Math.round(base*0.015*100)/100};
+  var vieillesseP={l:'Retraite Secu plafonnee',base:Math.min(base,3864),taux:0.0855,montant:Math.round(Math.min(base,3864)*0.0855*100)/100};
+  var vieillesseD={l:'Retraite Secu deplafonnee',base:base,taux:0.0202,montant:Math.round(base*0.0202*100)/100};
+  var complRetraite={l:'Complementaire retraite T1',base:Math.min(base,3864),taux:0.0472,montant:Math.round(Math.min(base,3864)*0.0472*100)/100};
+  var famille={l:'Allocations familiales',base:base,taux:0.0345,montant:Math.round(base*0.0345*100)/100};
+  var chomage={l:'Assurance chomage',base:base,taux:0.0405,montant:Math.round(base*0.0405*100)/100};
+  var items=[maladie,complSante,at,vieillesseP,vieillesseD,complRetraite,famille,chomage];
+  var totalBrut=items.reduce(function(s,it){return s+it.montant;},0);
+  totalBrut=Math.round(totalBrut*100)/100;
+  var ratio=SMIC_BRUT/brut;var fillon=0;
+  if(ratio>=1/1.6){var coeff=(0.3194/0.6)*(1.6*ratio-1);coeff=Math.max(0,Math.min(coeff,0.3194));fillon=Math.round(brut*coeff*100)/100;}
+  var total=Math.round(Math.max(0,totalBrut-fillon)*100)/100;
+  return{items:items,totalBrut:totalBrut,fillon:fillon,total:total};
+}
+
+window.addSalarie=function(){
+  var bg=document.createElement('div');bg.className='modal-bg';bg.id='modalPaie';
+  bg.innerHTML='<div class="modal">'
+  +'<h3>Ajouter un salarie</h3>'
+  +'<div class="gr g2">'
+  +'<div class="fg"><label>Nom</label><input class="inp" id="pNom"></div>'
+  +'<div class="fg"><label>Prenom</label><input class="inp" id="pPrenom"></div>'
+  +'</div>'
+  +'<div class="fg"><label>Poste</label><input class="inp" id="pPoste" placeholder="Ex: Developpeur, Comptable..."></div>'
+  +'<div class="gr g2">'
+  +'<div class="fg"><label>Type de contrat</label><select class="inp" id="pContrat"><option value="CDI">CDI</option><option value="CDD">CDD</option><option value="Apprenti">Apprenti</option></select></div>'
+  +'<div class="fg"><label>Salaire brut mensuel</label><input class="inp" type="number" id="pBrut" value="2200"></div>'
+  +'</div>'
+  +'<div class="gr g2">'
+  +'<div class="fg"><label>Date d\'embauche</label><input class="inp" type="date" id="pDateEmb" value="'+today()+'"></div>'
+  +'<div class="fg"><label>Taux PAS (%)</label><input class="inp" type="number" step="0.1" id="pPAS" value="0" min="0" max="50"></div>'
+  +'</div>'
+  +'<div class="fg"><label>N° Securite sociale</label><input class="inp" id="pSecu" placeholder="X XX XX XX XXX XXX XX"></div>'
+  +'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">'
+  +'<button class="bt bt-s" onclick="document.getElementById(\'modalPaie\').remove()">Annuler</button>'
+  +'<button class="bt bt-p" onclick="saveSalarieFromModal()">Enregistrer</button>'
+  +'</div></div>';
+  document.body.appendChild(bg);
+  bg.addEventListener('click',function(e){if(e.target===bg)bg.remove();});
+};
+
+window.saveSalarieFromModal=function(){
+  var nom=document.getElementById('pNom').value.trim();
+  var prenom=document.getElementById('pPrenom').value.trim();
+  if(!nom||!prenom){alert('Nom et prenom obligatoires');return;}
+  var salaries=loadSalaries();
+  salaries.push({
+    id:uid(),nom:nom,prenom:prenom,
+    poste:document.getElementById('pPoste').value.trim(),
+    typeContrat:document.getElementById('pContrat').value,
+    salaireBrut:parseFloat(document.getElementById('pBrut').value)||2200,
+    dateEmbauche:document.getElementById('pDateEmb').value||today(),
+    tauxPAS:parseFloat(document.getElementById('pPAS').value)||0,
+    numSecu:document.getElementById('pSecu').value.trim()||'X XX XX XX XXX XXX XX',
+    congesAcquis:2.08,congesPris:0,congesRestants:2.08
+  });
+  saveSalaries(salaries);
+  document.getElementById('modalPaie').remove();
+  renderPaie($('#page'));
+};
+
+window.delSalarie=function(id){
+  if(!confirm('Supprimer ce salarie ?'))return;
+  var salaries=loadSalaries().filter(function(s){return s.id!==id;});
+  saveSalaries(salaries);
+  renderPaie($('#page'));
+};
+
+function buildFichePaieHTML(sal,moisIdx,annee){
+  var moisNoms=['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+  if(moisIdx===undefined)moisIdx=new Date().getMonth();
+  if(annee===undefined)annee=new Date().getFullYear();
+  var periode=moisNoms[moisIdx]+' '+annee;
+  var brut=sal.salaireBrut||2200;
+  var heures=151.67;
+  var tauxH=Math.round(brut/heures*100)/100;
+  var chSal=calcChargesSalariales(brut);
+  var chPat=calcChargesPatronales(brut);
+  var netAvantPAS=Math.round((brut-chSal.total)*100)/100;
+  var complSanteSal=chSal.items.find(function(x){return x.l==='Complementaire sante';});
+  var netImposable=Math.round((brut-chSal.csgDed-(complSanteSal?complSanteSal.montant:0))*100)/100;
+  var tauxPAS=(sal.tauxPAS||0)/100;
+  var montantPAS=Math.round(netImposable*tauxPAS*100)/100;
+  var netAPayer=Math.round((netAvantPAS-montantPAS)*100)/100;
+  var moisEcoule=moisIdx+1;
+  var cumulBrut=Math.round(brut*moisEcoule*100)/100;
+  var cumulNetImposable=Math.round(netImposable*moisEcoule*100)/100;
+  var cumulNetPaye=Math.round(netAPayer*moisEcoule*100)/100;
+
+  var logo=company.logo?'<img src="'+company.logo+'" style="max-width:80px;max-height:60px;object-fit:contain;margin-right:14px">':'';
+
+  var html='<div style="page-break-after:always;padding-bottom:20px">';
+
+  html+='<div class="doc-header"><div class="left" style="display:flex;align-items:flex-start">'+logo+'<div>'
+  +'<h1>BULLETIN DE PAIE</h1>'
+  +'<div class="subtitle">Periode : '+periode+'</div>'
+  +'</div></div>'
+  +'<div class="right">'
+  +'<div class="company-name">'+(company.nom||'Ma Societe')+'</div>'
+  +(company.adresse||'')+'<br>'
+  +'SIREN : '+(company.siren||'XXX XXX XXX')+'<br>'
+  +'URSSAF : '+(company.urssaf||'XXX-XXXXXXXX')+'<br>'
+  +'<span style="font-size:11px;color:#6B7280">Conv. collective : '+(company.convention||'A definir')+'</span>'
+  +'</div></div>';
+
+  html+='<div style="display:flex;gap:20px;margin-bottom:20px">'
+  +'<div style="flex:1;background:#F0F5F2;border:1px solid #D1DDD6;border-radius:8px;padding:12px">'
+  +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#0A6847;margin-bottom:6px">Salarie</div>'
+  +'<div style="font-size:14px;font-weight:800">'+sal.prenom+' '+sal.nom+'</div>'
+  +'<div style="font-size:11px;color:#4B5563;margin-top:4px">Poste : '+(sal.poste||'-')+'</div>'
+  +'<div style="font-size:11px;color:#4B5563">N\u00b0 SS : '+(sal.numSecu||'X XX XX XX XXX XXX XX')+'</div>'
+  +'<div style="font-size:11px;color:#4B5563">Embauche : '+fmtD(sal.dateEmbauche)+'</div>'
+  +'<div style="font-size:11px;color:#4B5563">Contrat : '+(sal.typeContrat||'CDI')+'</div>'
+  +'</div>'
+  +'<div style="flex:1;background:#F0F5F2;border:1px solid #D1DDD6;border-radius:8px;padding:12px">'
+  +'<div style="font-size:10px;font-weight:700;text-transform:uppercase;color:#0A6847;margin-bottom:6px">Periode</div>'
+  +'<div style="font-size:14px;font-weight:800">'+periode+'</div>'
+  +'<div style="font-size:11px;color:#4B5563;margin-top:4px">Heures : '+heures.toFixed(2)+'h (temps plein)</div>'
+  +'<div style="font-size:11px;color:#4B5563">Taux horaire : '+tauxH.toFixed(2)+' EUR</div>'
+  +'</div></div>';
+
+  html+='<table><thead><tr>'
+  +'<th style="width:28%">Rubrique</th>'
+  +'<th style="text-align:right;width:12%">Base</th>'
+  +'<th style="text-align:right;width:12%">Taux sal.</th>'
+  +'<th style="text-align:right;width:12%">Montant sal.</th>'
+  +'<th style="text-align:right;width:12%">Taux pat.</th>'
+  +'<th style="text-align:right;width:12%">Montant pat.</th>'
+  +'</tr></thead><tbody>';
+
+  html+='<tr class="highlight-row"><td>Salaire de base ('+heures.toFixed(2)+'h x '+tauxH.toFixed(2)+')</td><td class="right-align">'+fmt2(brut)+'</td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td></tr>';
+
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">SANTE</td></tr>';
+  html+=paieRow('Securite sociale — Maladie',brut,0.004,0.07);
+  html+=paieRow('Complementaire sante',brut,0.005,0.0127);
+
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">ACCIDENTS DU TRAVAIL</td></tr>';
+  html+=paieRow('AT / Maladies professionnelles',brut,0,0.015);
+
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">RETRAITE</td></tr>';
+  html+=paieRow('Secu plafonnee',Math.min(brut,3864),0.069,0.0855);
+  html+=paieRow('Secu deplafonnee',brut,0.004,0.0202);
+  html+=paieRow('Complementaire T1',Math.min(brut,3864),0.0315,0.0472);
+
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">FAMILLE</td></tr>';
+  html+=paieRow('Allocations familiales',brut,0,0.0345);
+
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">ASSURANCE CHOMAGE</td></tr>';
+  html+=paieRow('Chomage',brut,0,0.0405);
+
+  var base9825=Math.round(brut*0.9825*100)/100;
+  html+='<tr style="background:#f0f5f2"><td colspan="6" style="font-weight:700;font-size:11px;color:#0A6847;padding:6px 12px">CSG / CRDS</td></tr>';
+  html+=paieRow('CSG deductible (98,25% du brut)',base9825,0.068,0);
+  html+=paieRow('CSG non deductible',base9825,0.024,0);
+  html+=paieRow('CRDS',base9825,0.005,0);
+
+  html+='<tr class="total-row"><td>TOTAL CHARGES</td><td class="right-align"></td><td class="right-align"></td><td class="right-align" style="font-size:13px">'+fmt2(chSal.total)+'</td><td class="right-align"></td><td class="right-align" style="font-size:13px">'+fmt2(chPat.totalBrut)+'</td></tr>';
+
+  if(chPat.fillon>0){
+    html+='<tr style="color:#0A6847;font-weight:600"><td>Reduction generale (Fillon)</td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td><td class="right-align">-'+fmt2(chPat.fillon)+'</td></tr>';
+    html+='<tr style="font-weight:700;background:#F0F5F2"><td>Total patronal apres reduction</td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td><td class="right-align"></td><td class="right-align">'+fmt2(chPat.total)+'</td></tr>';
+  }
+
+  html+='</tbody></table>';
+
+  html+='<div style="margin-top:20px">';
+
+  html+='<div style="display:flex;gap:12px;margin-bottom:12px">'
+  +'<div style="flex:1;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px"><div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:600">Net imposable</div><div style="font-size:18px;font-weight:800;margin-top:4px">'+fmt2(netImposable)+'</div></div>'
+  +'<div style="flex:1;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px"><div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:600">Net a payer avant PAS</div><div style="font-size:18px;font-weight:800;margin-top:4px">'+fmt2(netAvantPAS)+'</div></div>'
+  +'</div>';
+
+  html+='<div style="display:flex;gap:12px;margin-bottom:16px">'
+  +'<div style="flex:1;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px"><div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:600">Prelevement a la source (PAS) — '+(sal.tauxPAS||0).toFixed(1)+'%</div><div style="font-size:18px;font-weight:800;color:#DC3545;margin-top:4px">-'+fmt2(montantPAS)+'</div></div>'
+  +'<div style="flex:1;padding:14px 18px;background:#0A6847;border-radius:8px;text-align:center"><div style="font-size:10px;color:rgba(255,255,255,.7);text-transform:uppercase;font-weight:700;letter-spacing:1px">NET A PAYER</div><div style="font-size:28px;font-weight:900;color:#fff;margin-top:4px">'+fmt2(netAPayer)+'</div></div>'
+  +'</div>';
+
+  html+='<div style="margin-bottom:16px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#0A6847;margin-bottom:8px">Cumuls annuels ('+annee+')</div>'
+  +'<div style="display:flex;gap:10px">'
+  +'<div style="flex:1;padding:8px 12px;background:#F0F5F2;border-radius:6px;text-align:center"><div style="font-size:9px;color:#4B5563;text-transform:uppercase">Brut cumule</div><div style="font-size:14px;font-weight:800;color:#0A6847">'+fmt2(cumulBrut)+'</div></div>'
+  +'<div style="flex:1;padding:8px 12px;background:#F0F5F2;border-radius:6px;text-align:center"><div style="font-size:9px;color:#4B5563;text-transform:uppercase">Net imposable cumule</div><div style="font-size:14px;font-weight:800;color:#0A6847">'+fmt2(cumulNetImposable)+'</div></div>'
+  +'<div style="flex:1;padding:8px 12px;background:#F0F5F2;border-radius:6px;text-align:center"><div style="font-size:9px;color:#4B5563;text-transform:uppercase">Net paye cumule</div><div style="font-size:14px;font-weight:800;color:#0A6847">'+fmt2(cumulNetPaye)+'</div></div>'
+  +'</div></div>';
+
+  html+='<div style="display:flex;gap:12px">'
+  +'<div style="flex:1;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px"><div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:600">Mode de paiement</div><div style="font-size:13px;font-weight:700;margin-top:4px">Virement bancaire</div></div>'
+  +'<div style="flex:1;padding:10px 14px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px"><div style="font-size:10px;color:#4B5563;text-transform:uppercase;font-weight:600">Conges payes</div><div style="font-size:11px;margin-top:4px">Acquis : <b>'+(sal.congesAcquis||0).toFixed(2)+'j</b> | Pris : <b>'+(sal.congesPris||0).toFixed(2)+'j</b> | Restants : <b>'+(sal.congesRestants||0).toFixed(2)+'j</b></div></div>'
+  +'</div>';
+
+  html+='</div>';
+
+  html+='<div style="margin-top:24px;font-size:9px;color:#9CA3AF;line-height:1.6;border-top:1px solid #E5E7EB;padding-top:8px">'
+  +'Dans votre interet, conservez ce bulletin de paie sans limitation de duree. '
+  +'Pour toute question, adressez-vous a l\'inspection du travail ou a la DDETS de votre departement.</div>';
+
+  html+='</div>';
+  return html;
+}
+
+function paieRow(label,base,tauxSal,tauxPat){
+  var montSal=tauxSal?Math.round(base*tauxSal*100)/100:0;
+  var montPat=tauxPat?Math.round(base*tauxPat*100)/100:0;
+  return'<tr><td>'+label+'</td>'
+  +'<td class="right-align">'+fmt2(base)+'</td>'
+  +'<td class="right-align">'+(tauxSal?(tauxSal*100).toFixed(2)+'%':'')+'</td>'
+  +'<td class="right-align">'+(montSal?fmt2(montSal):'')+'</td>'
+  +'<td class="right-align">'+(tauxPat?(tauxPat*100).toFixed(2)+'%':'')+'</td>'
+  +'<td class="right-align">'+(montPat?fmt2(montPat):'')+'</td>'
+  +'</tr>';
+}
+
+window.genFichePaie=function(id){
+  var salaries=loadSalaries();
+  var sal=salaries.find(function(s){return s.id===id;});
+  if(!sal){alert('Salarie introuvable');return;}
+  var html=buildFichePaieHTML(sal);
+  openDocWindow('Fiche de paie — '+sal.prenom+' '+sal.nom,html);
+};
+
+window.genAllFiches=function(){
+  var salaries=loadSalaries();
+  if(salaries.length===0){alert('Aucun salarie enregistre');return;}
+  var moisNoms=['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+  var now=new Date();
+  var allHtml='<h2 style="text-align:center;color:#0A6847;margin-bottom:24px">Fiches de paie — '+moisNoms[now.getMonth()]+' '+now.getFullYear()+' ('+salaries.length+' salarie'+(salaries.length>1?'s':'')+')</h2>';
+  salaries.forEach(function(sal){
+    allHtml+=buildFichePaieHTML(sal);
+  });
+  openDocWindow('Fiches de paie — '+moisNoms[now.getMonth()]+' '+now.getFullYear(),allHtml);
+};
+
 // ============ MODE URGENCE ============
 function renderUrgence(el){
   el.innerHTML=`
@@ -4675,6 +4980,7 @@ render=function(){
       <div class="nav-s">Mon business</div>
       ${navItem('ecritures','📄','Ecritures')}
       ${navItem('facturation','🧾','Factures & Devis')}
+      ${navItem('paie','💰','Paie & salaires')}
       ${navItem('import','📥','Import bancaire')}
       ${navItem('frais','🚗','Notes de frais')}
       <div class="nav-s">Pilotage</div>
@@ -4690,6 +4996,7 @@ render=function(){
       <div class="nav-s">Plus</div>
       ${navItem('compta','📒','Grand Livre')}
       ${navItem('simul','📊','Simulateurs')}
+      ${navItem('ged','📁','Mes documents')}
       ${navItem('archives','📦','Archives & historique')}
       ${navItem('statuts','📜','Statuts & Docs')}
       ${navItem('settings','⚙️','Parametres')}
@@ -4712,6 +5019,7 @@ renderPage=function(){
     case'ecritures':renderEcritures(pg);break;
     case'compta':renderCompta(pg);break;
     case'facturation':renderFacturation(pg);break;
+    case'paie':renderPaie(pg);break;
     case'bilan':renderBilan(pg);break;
     case'previsionnel':renderPrevisionnel(pg);break;
     case'echeancier':renderEcheancier(pg);break;
@@ -4733,6 +5041,7 @@ renderPage=function(){
     case'urgence':renderUrgence(pg);break;
     case'embauche':renderEmbauche(pg);break;
     case'archives':renderArchives(pg);break;
+    case'ged':renderGED(pg);break;
   }
 };
 
@@ -6343,6 +6652,204 @@ window.archDelete=(year)=>{
   if(!confirm('Supprimer les donnees de l\'exercice '+year+' ?'))return;
   localStorage.removeItem('fp_historique_'+year);
   goTo('archives');
+};
+
+// ============ GED — Gestion Electronique de Documents ============
+const GED_CATS=['Tous','Factures','Releves bancaires','Statuts & juridique','Fiscal','Social','Contrats','Autre'];
+let _gedCat='Tous';
+let _gedSearch='';
+
+function gedDocs(){return load('ged_docs',[]);}
+function saveGED(docs){save('ged_docs',docs);}
+
+function gedStorageUsed(){
+  const raw=localStorage.getItem('fp_ged_docs');
+  return raw?new Blob([raw]).size:0;
+}
+function gedStorageMax(){return 5*1024*1024;}
+function fmtSize(b){if(b<1024)return b+' o';if(b<1048576)return(b/1024).toFixed(1)+' Ko';return(b/1048576).toFixed(2)+' Mo';}
+
+function gedFileIcon(type){
+  if(!type)return'📄';
+  if(type.startsWith('image/'))return'🖼️';
+  if(type==='application/pdf')return'📕';
+  if(type.includes('spreadsheet')||type.includes('excel')||type.includes('csv'))return'📊';
+  if(type.includes('word')||type.includes('document'))return'📝';
+  if(type.includes('zip')||type.includes('archive')||type.includes('rar'))return'📦';
+  if(type.includes('text'))return'📃';
+  return'📄';
+}
+
+function renderGED(el){
+  const docs=gedDocs();
+  const used=gedStorageUsed();
+  const max=gedStorageMax();
+  const pct=Math.min((used/max)*100,100);
+  const barColor=pct>90?'var(--red)':pct>70?'var(--org)':'var(--acc)';
+
+  const filtered=docs.filter(d=>{
+    const catOk=_gedCat==='Tous'||d.category===_gedCat;
+    const searchOk=!_gedSearch||d.name.toLowerCase().includes(_gedSearch.toLowerCase())||(d.category||'').toLowerCase().includes(_gedSearch.toLowerCase());
+    return catOk&&searchOk;
+  });
+
+  el.innerHTML=`
+  <div class="top"><div><h2>📁 Mes documents</h2><div class="top-s">Gestion electronique de documents — stockage local securise</div></div></div>
+
+  <div class="cd" style="margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <span style="font-size:12px;font-weight:600;color:var(--tx2)">Espace utilise</span>
+      <span style="font-size:12px;font-weight:700;color:${barColor}">${fmtSize(used)} / ${fmtSize(max)}</span>
+    </div>
+    <div style="height:8px;background:var(--bg4);border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .3s"></div>
+    </div>
+    ${pct>80?'<div class="al al-w" style="margin-top:8px"><span>⚠️</span><span>Espace de stockage presque plein. Les fichiers > 500 Ko ne sont pas stockes en entier.</span></div>':''}
+  </div>
+
+  ${uploadZone('ged','*/*',true,'window.uploadGEDFiles','Deposez vos documents ici','Tous types de fichiers — images, PDF, documents. Max 500 Ko par fichier pour le stockage complet.')}
+
+  <div style="margin-top:16px">
+    <div style="margin-bottom:12px">
+      <input class="inp" type="text" placeholder="🔍 Rechercher par nom ou categorie..." value="${_gedSearch}" oninput="window._gedSearch=this.value;window._gedSearchTimer&&clearTimeout(window._gedSearchTimer);window._gedSearchTimer=setTimeout(()=>goTo('ged'),300)">
+    </div>
+    <div class="tabs" style="overflow-x:auto">
+      ${GED_CATS.map(c=>`<div class="tab ${_gedCat===c?'on':''}" onclick="window._gedCat='${c}';goTo('ged')" style="white-space:nowrap">${c}${c!=='Tous'?' ('+docs.filter(d=>d.category===c).length+')':' ('+docs.length+')'}</div>`).join('')}
+    </div>
+  </div>
+
+  ${filtered.length===0?`
+    <div class="cd" style="text-align:center;padding:40px 20px">
+      <div style="font-size:48px;margin-bottom:12px">📂</div>
+      <div style="font-size:15px;font-weight:700;color:var(--tx2);margin-bottom:6px">${docs.length===0?'Aucun document':'Aucun resultat'}</div>
+      <div style="font-size:12px;color:var(--tx3)">${docs.length===0?'Importez vos documents via la zone ci-dessus':'Modifiez votre recherche ou changez de categorie'}</div>
+    </div>
+  `:`
+    <div class="gr g2" style="margin-top:4px">
+      ${filtered.map(d=>`
+        <div class="cd" style="padding:14px;position:relative">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:50px;height:50px;border-radius:8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">
+              ${d.type&&d.type.startsWith('image/')&&d.base64?`<img src="${d.base64}" style="width:50px;height:50px;object-fit:cover;border-radius:8px">`:gedFileIcon(d.type)}
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${d.name}">${d.name}</div>
+              <div style="font-size:10px;color:var(--tx3);margin-top:2px">${fmtD(d.date)} — ${fmtSize(d.size||0)}${d.tooLarge?' ⚠️ Metadonnees seulement':''}</div>
+              <div style="margin-top:6px">
+                <select class="inp" style="padding:4px 8px;font-size:10px;width:auto" onchange="window.setGEDCat('${d.id}',this.value)">
+                  ${GED_CATS.filter(c=>c!=='Tous').map(c=>`<option value="${c}" ${d.category===c?'selected':''}>${c}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+            ${d.tooLarge?'':`<button class="bt bt-s sm" onclick="window.viewGEDDoc('${d.id}')">👁️ Voir</button>`}
+            ${d.tooLarge?'':`<button class="bt bt-s sm" onclick="window.sendToAI('${d.id}')">🤖 Envoyer a l&#39;IA</button>`}
+            <button class="bt bt-d sm" onclick="window.delGEDDoc('${d.id}')">🗑️</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `}`;
+}
+
+window._gedCat='Tous';
+window._gedSearch='';
+Object.defineProperty(window,'_gedCat',{get:()=>_gedCat,set:v=>{_gedCat=v;},configurable:true});
+Object.defineProperty(window,'_gedSearch',{get:()=>_gedSearch,set:v=>{_gedSearch=v;},configurable:true});
+
+window.uploadGEDFiles=async(fileList)=>{
+  const files=Array.from(fileList);
+  if(files.length===0)return;
+  const docs=gedDocs();
+  const maxFileSize=500*1024;
+
+  for(const f of files){
+    const doc={id:uid(),name:f.name,type:f.type,size:f.size,category:'Autre',date:today(),exercice:currentExercice,tooLarge:false,base64:null};
+
+    // Auto-detect category from name
+    const nl=f.name.toLowerCase();
+    if(/facture|invoice|fact_/.test(nl))doc.category='Factures';
+    else if(/releve|bancaire|bank|statement/.test(nl))doc.category='Releves bancaires';
+    else if(/statut|kbis|immatricul|juridique|aga|pv|assembl/.test(nl))doc.category='Statuts & juridique';
+    else if(/fiscal|impot|taxe|declaration|avis|cfe|cvae|liasse/.test(nl))doc.category='Fiscal';
+    else if(/urssaf|dsn|social|cotisation|cpam|retraite/.test(nl))doc.category='Social';
+    else if(/contrat|bail|avenant|cdi|cdd/.test(nl))doc.category='Contrats';
+
+    if(f.size>maxFileSize){
+      doc.tooLarge=true;
+      doc.base64=null;
+    }else{
+      try{
+        const b64=await new Promise((res,rej)=>{
+          const reader=new FileReader();
+          reader.onload=()=>res(reader.result);
+          reader.onerror=rej;
+          reader.readAsDataURL(f);
+        });
+        doc.base64=b64;
+      }catch(e){
+        doc.tooLarge=true;
+        doc.base64=null;
+      }
+    }
+    docs.push(doc);
+  }
+
+  try{
+    saveGED(docs);
+  }catch(e){
+    alert('Erreur de stockage : espace insuffisant. Supprimez des documents ou importez des fichiers plus petits.');
+    return;
+  }
+  goTo('ged');
+};
+
+window.delGEDDoc=(id)=>{
+  if(!confirm('Supprimer ce document ?'))return;
+  const docs=gedDocs().filter(d=>d.id!==id);
+  saveGED(docs);
+  goTo('ged');
+};
+
+window.viewGEDDoc=(id)=>{
+  const doc=gedDocs().find(d=>d.id===id);
+  if(!doc||!doc.base64)return;
+  const w=window.open();
+  if(w){
+    if(doc.type&&doc.type.startsWith('image/')){
+      w.document.write(`<html><head><title>${doc.name}</title></head><body style="margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#1a1a1a"><img src="${doc.base64}" style="max-width:100%;max-height:100vh"></body></html>`);
+    }else if(doc.type==='application/pdf'){
+      w.document.write(`<html><head><title>${doc.name}</title></head><body style="margin:0"><iframe src="${doc.base64}" style="width:100%;height:100vh;border:none"></iframe></body></html>`);
+    }else{
+      w.document.write(`<html><head><title>${doc.name}</title></head><body style="margin:20px;font-family:monospace"><h3>${doc.name}</h3><p>Type: ${doc.type}</p><p>Taille: ${fmtSize(doc.size)}</p><a href="${doc.base64}" download="${doc.name}">Telecharger</a></body></html>`);
+    }
+    w.document.close();
+  }
+};
+
+window.sendToAI=(id)=>{
+  const doc=gedDocs().find(d=>d.id===id);
+  if(!doc||!doc.base64)return;
+  // For text-based files, extract content; for others, pass metadata
+  let text='';
+  if(doc.type&&(doc.type.startsWith('text/')||doc.type.includes('json')||doc.type.includes('csv')||doc.type.includes('xml'))){
+    try{
+      text=atob(doc.base64.split(',')[1]||'');
+    }catch(e){
+      text='[Fichier: '+doc.name+', Type: '+doc.type+', Taille: '+fmtSize(doc.size)+']';
+    }
+  }else{
+    text='[Document joint: '+doc.name+', Type: '+doc.type+', Categorie: '+doc.category+', Date: '+doc.date+', Taille: '+fmtSize(doc.size)+']';
+  }
+  window._chatFileContext=text;
+  goTo('assistant');
+};
+
+window.setGEDCat=(id,cat)=>{
+  const docs=gedDocs();
+  const doc=docs.find(d=>d.id===id);
+  if(doc){doc.category=cat;saveGED(docs);}
 };
 
 // Re-render with new nav
