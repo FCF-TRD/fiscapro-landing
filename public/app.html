@@ -2945,6 +2945,91 @@ function docHeader(title,subtitle,showRib){
   return h;
 }
 
+// ============ DEMARCHES ADMIN ============
+function renderDemarches(el){
+  const t=TYPES[company?.type]||TYPES.SAS;const isIS=company.regime!=='ir';
+  const noTVA=company.regimeTVA==='franchise'||company.regimeTVA==='exoneree';
+  const cats=[
+    {id:'fiscal',icon:'🏛️',label:'Impots & declarations',color:'var(--pur)',items:[
+      {titre:'Declarer et payer la TVA (CA3 / CA12)',quoi:'Declaration mensuelle (CA3) ou annuelle (CA12) de la TVA collectee et deductible.',quand:noTVA?'Non concerne — tu es en franchise/exoneree':'CA3 : chaque mois avant le 19-24. CA12 : avant le 2e jour ouvre de mai.',qui:'Service des Impots des Entreprises (SIE)',comment:'Connexion sur impots.gouv.fr → Espace professionnel → Declarer TVA. Les montants sont dans ton onglet Declarations.',lien:'https://www.impots.gouv.fr/professionnel',actif:!noTVA},
+      {titre:'Declarer le resultat (2065 + liasse 2033)',quoi:'Declaration annuelle de ton resultat fiscal et paiement de l\'IS. Comprend le bilan et le compte de resultat.',quand:'Avant le 2e jour ouvre suivant le 1er mai (cloture 31/12). Report possible jusqu\'a mi-mai en teletransmission.',qui:'SIE via teletransmission EDI ou EFI',comment:'Ton onglet Declarations genere la 2065 et la 2033 pre-remplies. Telecharge-les et transmets via impots.gouv.fr ou ton expert-comptable.',lien:'https://www.impots.gouv.fr/professionnel',actif:isIS},
+      {titre:'Payer les acomptes IS',quoi:'4 acomptes trimestriels de 25% de l\'IS du dernier exercice.',quand:'15 mars, 15 juin, 15 septembre, 15 decembre',qui:'SIE — paiement en ligne sur impots.gouv.fr',comment:'Le montant est dans ton echeancier fiscal. Si ton IS est < 3 000€, tu ne payes pas d\'acomptes (reglement unique au solde).',lien:'https://www.impots.gouv.fr/professionnel',actif:isIS},
+      {titre:'Payer la CFE',quoi:'Cotisation Fonciere des Entreprises — taxe locale basee sur la valeur locative de tes locaux.',quand:'Acompte 15 juin (si > 3 000€) + solde 15 decembre',qui:'SIE — avis en ligne sur impots.gouv.fr',comment:'Exonere la 1ere annee. Verifie ton avis sur impots.gouv.fr → Mes services → Consulter → Avis CFE.',lien:'https://www.impots.gouv.fr/professionnel',actif:true},
+      {titre:'DAS2 — Declaration des honoraires',quoi:'Si tu as paye > 1 200€ TTC d\'honoraires a un prestataire dans l\'annee, tu dois le declarer.',quand:'Avant le 1er mai (meme date que la 2065)',qui:'SIE — formulaire DAS2 en ligne',comment:'Concerne : avocats, experts-comptables, consultants, formateurs independants. Non-declaration = amende 50% des sommes.',lien:'https://www.impots.gouv.fr/formulaire/das2/declaration-dhonoraires',actif:true},
+    ]},
+    {id:'social',icon:'👥',label:'URSSAF & social',color:'var(--blu)',items:[
+      {titre:'Declarer et payer les cotisations URSSAF',quoi:'Cotisations sociales mensuelles ou trimestrielles (maladie, retraite, allocations familiales, CSG/CRDS).',quand:t.tns?'Mensuellement ou trimestriellement au 5 du mois':'Chaque mois via la DSN (avant le 5 ou 15 du mois suivant)',qui:'URSSAF — urssaf.fr',comment:t.tns?'TNS : connecte-toi sur urssaf.fr → Mon compte. Cotisations provisionnelles basees sur N-2, regularisation en N+1.':'Assimile salarie : via la DSN (Declaration Sociale Nominative) transmise par ton logiciel de paie.',lien:'https://www.urssaf.fr',actif:true},
+      {titre:'DPAE — Declarer une embauche',quoi:'Declaration Prealable a l\'Embauche. OBLIGATOIRE avant le 1er jour de travail du salarie.',quand:'Au plus tard 8 jours avant l\'embauche',qui:'URSSAF',comment:'En ligne sur urssaf.fr → Declarer une embauche. Infos necessaires : nom, prenom, date naissance, NIR (n° secu), date embauche, type contrat.',lien:'https://www.due.urssaf.fr',actif:true},
+      {titre:'DSN — Declaration Sociale Nominative',quoi:'Declaration mensuelle unique qui remplace toutes les anciennes declarations sociales (DUCS, DADS, attestation Pole emploi...).',quand:'Le 5 du mois (> 50 salaries) ou le 15 du mois (< 50 salaries)',qui:'Net-entreprises.fr',comment:'Transmise automatiquement si tu utilises un logiciel de paie (Payfit, Silae, etc.). Contient : salaires, cotisations, absences, arrets.',lien:'https://www.net-entreprises.fr',actif:company.nbSalaries>0},
+    ]},
+    {id:'greffe',icon:'⚖️',label:'Greffe & juridique',color:'var(--org)',items:[
+      {titre:'Depot des comptes annuels',quoi:'Depot du bilan, compte de resultat et PV d\'AG au greffe du tribunal de commerce. OBLIGATOIRE.',quand:'Dans le mois suivant l\'approbation des comptes (soit avant fin juillet si cloture 31/12)',qui:'Greffe du tribunal de commerce — infogreffe.fr',comment:'En ligne sur infogreffe.fr → Deposer les comptes. Documents : bilan, compte de resultat, annexe, PV AG, rapport de gestion. Cout : ~45€.',lien:'https://www.infogreffe.fr/formalites/depot-des-comptes',actif:true},
+      {titre:'Approbation des comptes (AG/Decision associe unique)',quoi:'L\'assemblee generale (ou la decision de l\'associe unique) doit approuver les comptes et decider de l\'affectation du resultat.',quand:'Dans les 6 mois suivant la cloture de l\'exercice',qui:'En interne — PV a rediger et conserver',comment:'Ton onglet Bilan & Documents genere le PV d\'AG automatiquement. Affectation : reserve legale (5%) + report a nouveau ou dividendes.',lien:'',actif:true},
+      {titre:'Modification des statuts',quoi:'Changement d\'adresse, de denomination, d\'objet social, augmentation de capital, changement de dirigeant...',quand:'A chaque modification',qui:'Greffe — infogreffe.fr → Modifier une entreprise',comment:'PV d\'AGE + statuts mis a jour + formulaire M2 + publication dans un journal d\'annonces legales. Cout : ~200-400€.',lien:'https://www.infogreffe.fr/formalites/modifier-une-entreprise',actif:true},
+      {titre:'Kbis — Extrait a jour',quoi:'Document officiel prouvant l\'existence de ta societe. Demande par les banques, clients, fournisseurs.',quand:'A la demande (validite usuelle : < 3 mois)',qui:'Greffe — monidenum.fr (gratuit) ou infogreffe.fr',comment:'Gratuit et illimite sur monidenum.fr pour le dirigeant. Sinon 3,37€ sur infogreffe.fr.',lien:'https://www.monidenum.fr',actif:true},
+    ]},
+    {id:'formation',icon:'📚',label:'Formation & activite',color:'var(--grn)',items:[
+      {titre:'BPF — Bilan Pedagogique et Financier',quoi:'Declaration annuelle obligatoire pour tout organisme de formation (meme si CA = 0).',quand:'Avant le 30 avril chaque annee',qui:'DREETS — sur mesdemarches.emploi.gouv.fr',comment:'Declare : CA formation, nombre de stagiaires, heures dispensees, financeurs. Si tu ne le fais pas, tu perds ton NDA.',lien:'https://mesdemarches.emploi.gouv.fr',actif:/^85/.test((company.ape||'').replace(/[.\s]/g,''))},
+      {titre:'Qualiopi — Certification qualite',quoi:'Certification obligatoire pour acceder aux financements publics (OPCO, CPF, Pole emploi).',quand:'Audit initial puis tous les 18 mois (surveillance) et tous les 3 ans (renouvellement)',qui:'Organisme certificateur accredite (AFNOR, Bureau Veritas, etc.)',comment:'7 criteres, 32 indicateurs. Preparation : 2-3 mois. Cout audit initial : 1 500-3 000€.',lien:'https://travail-emploi.gouv.fr/formation-professionnelle/acteurs-cadre-et-qualite-de-la-formation-professionnelle/article/qualiopi-marque-de-certification-qualite-des-prestataires-de-formation',actif:/^85/.test((company.ape||'').replace(/[.\s]/g,''))},
+      {titre:'NDA — Numero Declaration Activite',quoi:'Numero obligatoire pour exercer l\'activite de formation professionnelle.',quand:'Dans les 3 mois suivant la 1ere convention de formation signee',qui:'DREETS (ex-DIRECCTE)',comment:'Formulaire en ligne. Pieces : convention de formation, CV du formateur, casier judiciaire bulletin n°3, Kbis.',lien:'https://mesdemarches.emploi.gouv.fr',actif:/^85/.test((company.ape||'').replace(/[.\s]/g,''))},
+    ]},
+    {id:'banque',icon:'🏦',label:'Banque & assurance',color:'var(--cya)',items:[
+      {titre:'Ouvrir un compte professionnel',quoi:'Obligatoire pour les societes (SAS, SARL, SA). Recommande pour les EI/micro.',quand:'Avant l\'immatriculation (depot du capital)',qui:'Banque de ton choix (Qonto, BNP, SG, Shine...)',comment:'Compare les frais mensuels. Qonto et Shine sont moins chers que les banques traditionnelles pour les TPE.',lien:'',actif:true},
+      {titre:'Assurance RC Professionnelle',quoi:'Responsabilite civile professionnelle. Obligatoire dans certains secteurs (BTP, sante, conseil). Tres recommandee partout.',quand:'Des le debut d\'activite',qui:'Assureur (AXA, Allianz, MAIF, Hiscox...)',comment:'Couvre : dommages causes aux clients, erreurs professionnelles, litiges. Cout : 150-500€/an pour une TPE.',lien:'',actif:true},
+      {titre:'Assurance decennale (BTP)',quoi:'Obligatoire pour tous les acteurs du BTP. Couvre les dommages compromettant la solidite de l\'ouvrage pendant 10 ans.',quand:'Avant le 1er chantier',qui:'Assureur specialise BTP',comment:'Cout : 2-5% du CA. Sans decennale = delit penal + impossibilite de travailler.',lien:'',actif:/^4[123]/.test((company.ape||'').replace(/[.\s]/g,''))},
+    ]},
+  ];
+
+  const curTab=window._demTab||0;
+
+  el.innerHTML=`
+  <div class="top"><div><h2>📋 Demarches administratives</h2><div class="top-s">Tout ce que tu dois faire pour ${company.nom||'ta societe'}, quand, comment et ou</div></div></div>
+
+  <div class="tabs" style="margin-bottom:16px">
+    ${cats.map((c,i)=>`<div class="tab ${curTab===i?'on':''}" onclick="window._demTab=${i};renderDemarches($('#page'))">${c.icon} <span class="hide-mob">${c.label.split(' &')[0]}</span></div>`).join('')}
+  </div>
+
+  ${(()=>{
+    const cat=cats[curTab]||cats[0];
+    const actifs=cat.items.filter(i=>i.actif);
+    const inactifs=cat.items.filter(i=>!i.actif);
+    return`
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:20px">${cat.icon}</span>
+      <div><div style="font-size:15px;font-weight:800;color:${cat.color}">${cat.label}</div></div>
+    </div>
+
+    ${actifs.map((d,i)=>`
+    <div class="cd" style="padding:0;margin-bottom:8px;overflow:hidden;cursor:pointer;border-left:3px solid ${cat.color}" onclick="document.getElementById('dem_${cat.id}${i}').classList.toggle('hide')">
+      <div style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="font-size:14px;font-weight:700;flex:1">${d.titre}</div>
+          <span style="color:var(--tx3)">▸</span>
+        </div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">${d.quoi.substring(0,80)}...</div>
+      </div>
+      <div id="dem_${cat.id}${i}" class="hide" style="border-top:1px solid var(--brd);padding:14px 16px;background:var(--bg3)">
+        <div style="display:grid;gap:10px">
+          <div style="display:flex;gap:8px;align-items:start"><span style="font-size:14px">📄</span><div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px">C'est quoi</div><div style="font-size:12px;color:var(--tx2);line-height:1.6">${d.quoi}</div></div></div>
+          <div style="display:flex;gap:8px;align-items:start"><span style="font-size:14px">📅</span><div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px">Quand</div><div style="font-size:12px;color:var(--tx2);line-height:1.6">${d.quand}</div></div></div>
+          <div style="display:flex;gap:8px;align-items:start"><span style="font-size:14px">📬</span><div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px">A qui / ou</div><div style="font-size:12px;color:var(--tx2);line-height:1.6">${d.qui}</div></div></div>
+          <div style="display:flex;gap:8px;align-items:start"><span style="font-size:14px">✍️</span><div><div style="font-size:10px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px">Comment faire</div><div style="font-size:12px;color:var(--tx2);line-height:1.6">${d.comment}</div></div></div>
+        </div>
+        ${d.lien?`<a href="${d.lien}" target="_blank" rel="noopener" class="bt bt-p sm" style="margin-top:12px;text-decoration:none">🔗 Acceder au service →</a>`:''}
+      </div>
+    </div>`).join('')}
+
+    ${inactifs.length>0?`
+    <div style="margin-top:16px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--tx3);letter-spacing:.5px;padding-left:4px;margin-bottom:6px">Non concerne par ton profil</div>
+    ${inactifs.map(d=>`<div class="cd" style="padding:10px 14px;margin-bottom:4px;opacity:.4;border-left:3px solid var(--bg4)"><div style="font-size:12px;font-weight:600;color:var(--tx3)">${d.titre}</div></div>`).join('')}
+    `:''}`;
+  })()}
+
+  <div style="text-align:center;margin-top:16px">
+    <button class="bt bt-p" onclick="goTo('assistant')">💬 Demander a l'IA quelle demarche faire</button>
+  </div>`;
+}
+
 // ============ MODE URGENCE ============
 function renderUrgence(el){
   el.innerHTML=`
@@ -3057,6 +3142,7 @@ render=function(){
       <div class="nav-s">Fiscal</div>
       ${navItem('echeancier','📅','Echeancier')}
       ${navItem('declarations','🏛️','Declarations')}
+      ${navItem('demarches','📋','Demarches admin')}
       <div class="nav-s">Plus</div>
       ${navItem('compta','📒','Grand Livre')}
       ${navItem('simul','📊','Simulateurs')}
@@ -3082,6 +3168,7 @@ renderPage=function(){
     case'previsionnel':renderPrevisionnel(pg);break;
     case'echeancier':renderEcheancier(pg);break;
     case'declarations':renderDeclarations(pg);break;
+    case'demarches':renderDemarches(pg);break;
     case'assistant':renderAssistant(pg);break;
     case'opti':renderOpti(pg);break;
     case'aides':renderAides(pg);break;
