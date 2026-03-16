@@ -2632,11 +2632,43 @@ window._cTab=['journal'];
 // ============ V3: FACTURATION PDF ============
 let nextFactNum=load('nextFactNum',1);
 
+let nextDevisNum=load('nextDevisNum',1);
+
 function renderFacturation(el){
   const invs=load('invoices',[]);
+  const devis=load('devisList',[]);
+  const factTab=window._factTab||'factures';
   el.innerHTML=`
-  <div class="top"><div><h2>🧾 Facturation</h2><div class="top-s">Factures conformes avec mentions légales obligatoires</div></div>
-    <button class="bt bt-p" onclick="openNewInvoice()">+ Nouvelle facture</button></div>
+  <div class="top"><div><h2>🧾 Factures & Devis</h2><div class="top-s">Documents commerciaux conformes</div></div>
+    <div style="display:flex;gap:6px">
+      <button class="bt bt-p" onclick="openNewInvoice()">+ Facture</button>
+      <button class="bt bt-s" onclick="openNewDevis()">+ Devis</button>
+    </div></div>
+  <div class="tabs" style="margin-bottom:14px">
+    <div class="tab ${factTab==='factures'?'on':''}" onclick="window._factTab='factures';renderPage()">Factures (${invs.length})</div>
+    <div class="tab ${factTab==='devis'?'on':''}" onclick="window._factTab='devis';renderPage()">Devis (${devis.length})</div>
+  </div>
+
+  ${factTab==='devis'?`
+  ${devis.length===0?`<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">📝</div><p>Aucun devis</p></div>`:`
+  <div class="cd">
+  <div class="desk-only tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="hide-mob">Objet</th><th style="text-align:right">TTC</th><th>Statut</th><th></th></tr></thead><tbody>
+  ${devis.sort((a,b)=>b.num-a.num).map(d=>{
+    const expired=d.status==='expire'||(d.status!=='accepte'&&new Date(d.validite)<new Date());
+    return`<tr><td style="font-weight:700">D-${String(d.num).padStart(4,'0')}</td><td style="white-space:nowrap">${fmtD(d.date)}</td><td style="font-weight:600;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.clientName}</td><td class="hide-mob" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.objet||''}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${fmt(d.totalTTC)}</td>
+    <td>${d.status==='accepte'?'<span class="tg t-grn">Accepte</span>':expired?'<span class="tg t-red">Expire</span>':'<span class="tg t-org">En attente</span>'}</td>
+    <td><div style="display:flex;gap:3px"><button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Facture</button>`:''}</div></td></tr>`;
+  }).join('')}</tbody></table></div>
+  <div class="mob-only mob-txn" style="display:none">
+  ${devis.sort((a,b)=>b.num-a.num).map(d=>{
+    const expired=d.status==='expire'||(d.status!=='accepte'&&new Date(d.validite)<new Date());
+    return`<div class="txn-card">
+      <div class="txn-row"><div><div class="txn-desc">D-${String(d.num).padStart(4,'0')} — ${d.clientName}</div><div class="txn-date">${fmtD(d.date)} — ${d.objet||''}</div></div>
+      <div class="txn-amt" style="color:var(--blu)">${fmt(d.totalTTC)}</div></div>
+      <div class="txn-meta">${d.status==='accepte'?'<span class="tg t-grn">Accepte</span>':expired?'<span class="tg t-red">Expire</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlDevisPDF(${d.num})">PDF</button>${d.status!=='accepte'?`<button class="bt bt-g sm" onclick="convertDevisToInvoice(${d.num})">→ Fact.</button>`:''}</div>
+    </div>`;}).join('')}
+  </div></div>`}
+  `:`
   ${invs.length===0?`<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">🧾</div><p>Aucune facture émise</p></div>`:`
   <div class="cd">
   <div class="desk-only tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="hide-mob">Objet</th><th style="text-align:right">TTC</th><th>Statut</th><th></th></tr></thead><tbody>
@@ -2654,7 +2686,7 @@ function renderFacturation(el){
       <div class="txn-amt" style="color:var(--grn)">${fmt(inv.totalTTC)}</div></div>
       <div class="txn-meta">${inv.paid?'<span class="tg t-grn">Payée</span>':overdue?'<span class="tg t-red">Retard</span>':'<span class="tg t-org">Attente</span>'}<button class="bt bt-p sm" onclick="dlInvoicePDF(${inv.num})">PDF</button>${!inv.paid?`<button class="bt bt-g sm" onclick="markPaid(${inv.num})">✓</button>`:''}</div>
     </div>`;}).join('')}
-  </div></div>`}`;
+  </div></div>`}`}`;
 }
 
 window.openNewInvoice=()=>{
@@ -2716,6 +2748,104 @@ window.saveInvoice=()=>{
 window.markPaid=(num)=>{
   const invs=load('invoices',[]);const inv=invs.find(i=>i.num===num);if(inv){inv.paid=true;save('invoices',invs);}
   const f=factures.find(f=>f.desc&&f.client);if(f)f.paye=true;persist();renderPage();
+};
+
+// ============ DEVIS ============
+window.openNewDevis=()=>{
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const m=document.createElement('div');m.className='modal-bg';m.onclick=e=>{if(e.target===m)m.remove();};
+  m.innerHTML=`<div class="modal fade" style="max-width:700px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>Nouveau devis — D-${String(nextDevisNum).padStart(4,'0')}</h3><button class="bt bt-s sm" onclick="this.closest('.modal-bg').remove()">✕</button></div>
+  <div class="gr g2">
+    <div class="fg"><label>Date</label><input class="inp" type="date" id="devDate" value="${today()}"></div>
+    <div class="fg"><label>Validite</label><select class="inp" id="devValidite"><option value="30">30 jours</option><option value="60">60 jours</option><option value="90">90 jours</option></select></div>
+  </div>
+  <div style="font-weight:700;font-size:12px;margin:12px 0 8px;color:var(--tx2)">CLIENT</div>
+  <div class="gr g2">
+    <div class="fg"><label>Raison sociale</label><input class="inp" id="devCName"></div>
+    <div class="fg"><label>SIREN client</label><input class="inp" id="devCSiren"></div>
+  </div>
+  <div class="fg"><label>Adresse client</label><input class="inp" id="devCAddr"></div>
+  <div style="font-weight:700;font-size:12px;margin:12px 0 8px;color:var(--tx2)">PRESTATIONS</div>
+  <div id="devLines"></div>
+  <button class="bt bt-s sm" onclick="addDevLine()" style="margin-bottom:12px">+ Ajouter une ligne</button>
+  <div class="fg"><label>Objet</label><input class="inp" id="devObjet" placeholder="Proposition commerciale — Projet X"></div>
+  <div class="fg"><label>Conditions / CGV</label><textarea class="inp" id="devCond" rows="3" placeholder="Acompte 30% a la commande. Solde a la livraison."></textarea></div>
+  <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="bt bt-s" onclick="this.closest('.modal-bg').remove()">Annuler</button><button class="bt bt-p" onclick="saveDevis()">Creer le devis</button></div></div>`;
+  document.body.appendChild(m);
+  addDevLine();
+};
+
+window.addDevLine=()=>{
+  const c=$('#devLines');if(!c)return;
+  const d=document.createElement('div');d.className='gr g4';d.style.gap='8px';d.style.marginBottom='8px';
+  d.innerHTML=`<div class="fg"><label>Description</label><input class="inp devDesc"></div><div class="fg"><label>Qte</label><input class="inp devQty" type="number" value="1" step="0.5"></div><div class="fg"><label>PU HT</label><input class="inp devPU" type="number" step="0.01"></div><div class="fg"><label>TVA %</label><select class="inp devTVA"><option value="0">0%</option><option value="20" selected>20%</option><option value="10">10%</option><option value="5.5">5.5%</option></select></div>`;
+  c.appendChild(d);
+};
+
+window.saveDevis=()=>{
+  const lines=[];
+  const descs=$$('.devDesc');const qtys=$$('.devQty');const pus=$$('.devPU');const tvas=$$('.devTVA');
+  for(let i=0;i<descs.length;i++){
+    const qty=+(qtys[i]?.value||0);const pu=+(pus[i]?.value||0);const tva=+(tvas[i]?.value||0);
+    if(pu>0)lines.push({desc:descs[i].value,qty,pu,tva,ht:qty*pu,ttc:qty*pu*(1+tva/100)});
+  }
+  if(lines.length===0){alert('Ajoute au moins une ligne');return;}
+  const totalHT=lines.reduce((s,l)=>s+l.ht,0);
+  const totalTVA=lines.reduce((s,l)=>s+l.ht*(l.tva/100),0);
+  const totalTTC=totalHT+totalTVA;
+  const valDate=new Date($('#devDate').value);valDate.setDate(valDate.getDate()+(+$('#devValidite').value));
+  const dev={num:nextDevisNum,date:$('#devDate').value,validite:valDate.toISOString().split('T')[0],
+    clientName:$('#devCName').value,clientSiren:$('#devCSiren').value,clientAddr:$('#devCAddr').value,
+    objet:$('#devObjet').value,conditions:$('#devCond').value,lines,totalHT,totalTVA,totalTTC,status:'attente'};
+  const devs=load('devisList',[]);devs.push(dev);save('devisList',devs);
+  nextDevisNum++;save('nextDevisNum',nextDevisNum);
+  $('.modal-bg')?.remove();window._factTab='devis';renderPage();
+};
+
+window.dlDevisPDF=(num)=>{
+  const devs=load('devisList',[]);const dev=devs.find(d=>d.num===num);if(!dev)return;
+  const t=TYPES[company?.type]||TYPES.SAS;
+  const h=docHeader('DEVIS D-'+String(dev.num).padStart(4,'0'),'Date: '+fmtD(dev.date)+' — Valable jusqu\'au: '+fmtD(dev.validite),false)
+  +'<div style="display:flex;gap:20px;margin:20px 0"><div class="inv-box" style="flex:1"><div style="font-weight:700;margin-bottom:6px;color:#0A6847">EMETTEUR</div>'
+  +(company.nom||'')+'<br>'+(company.adresse||'')+'<br>SIREN: '+(company.siren||'')
+  +'</div>'
+  +'<div class="inv-box" style="flex:1"><div style="font-weight:700;margin-bottom:6px;color:#0A6847">CLIENT</div>'
+  +(dev.clientName||'')+'<br>'+(dev.clientAddr||'')+(dev.clientSiren?'<br>SIREN: '+dev.clientSiren:'')+'</div></div>'
+  +'<div style="margin-bottom:12px;font-size:12px"><b>Objet :</b> '+(dev.objet||'')+'</div>'
+  +'<table><thead><tr><th>Description</th><th class="right-align">Qte</th><th class="right-align">PU HT</th><th class="right-align">TVA</th><th class="right-align">Total HT</th></tr></thead><tbody>'
+  +dev.lines.map(l=>'<tr><td>'+l.desc+'</td><td class="right-align">'+l.qty+'</td><td class="right-align">'+fmt2(l.pu)+'</td><td class="right-align">'+l.tva+'%</td><td class="right-align bold">'+fmt2(l.ht)+'</td></tr>').join('')
+  +'</tbody></table>'
+  +'<table style="width:300px;margin-left:auto"><tbody>'
+  +'<tr><td>Total HT</td><td class="right-align bold">'+fmt2(dev.totalHT)+'</td></tr>'
+  +'<tr><td>TVA</td><td class="right-align">'+fmt2(dev.totalTVA)+'</td></tr>'
+  +'<tr class="total-row"><td class="bold" style="font-size:14px">Total TTC</td><td class="right-align bold" style="font-size:14px">'+fmt2(dev.totalTTC)+'</td></tr></tbody></table>'
+  +(dev.conditions?'<div style="margin-top:16px;padding:12px;background:#F0F5F2;border-radius:6px;font-size:11px;line-height:1.6"><b>Conditions :</b><br>'+dev.conditions.replace(/\n/g,'<br>')+'</div>':'')
+  +'<div class="signature-block"><div class="sig">Date et signature du client<br>(precede de la mention "Bon pour accord")</div><div class="sig">Le prestataire<br>'+(company.nom||'')+'</div></div>'
+  +'<div class="inv-mentions"><b>Mentions legales</b><br>'
+  +(company.nom||'')+' — '+t.f+' au capital de '+fmt(company.capital||0)+' — SIREN: '+(company.siren||'')+'<br>'
+  +'Devis valable jusqu\'au '+fmtD(dev.validite)+'. Ce devis ne constitue pas une facture.<br>'
+  +(company.regimeTVA==='franchise'?'TVA non applicable, art. 293B du CGI':'')
+  +'</div>';
+  openDocWindow('Devis D-'+String(dev.num).padStart(4,'0'),h);
+};
+
+window.convertDevisToInvoice=(num)=>{
+  const devs=load('devisList',[]);const dev=devs.find(d=>d.num===num);if(!dev)return;
+  if(!confirm('Convertir le devis D-'+String(dev.num).padStart(4,'0')+' en facture ?'))return;
+  // Create invoice from devis
+  const dueDate=new Date();dueDate.setDate(dueDate.getDate()+30);
+  const inv={num:nextFactNum,date:today(),due:dueDate.toISOString().split('T')[0],
+    clientName:dev.clientName,clientSiren:dev.clientSiren,clientAddr:dev.clientAddr,
+    objet:dev.objet+' (ref. devis D-'+String(dev.num).padStart(4,'0')+')',conditions:dev.conditions,
+    lines:dev.lines,totalHT:dev.totalHT,totalTVA:dev.totalTVA,totalTTC:dev.totalTTC,paid:false};
+  const invs=load('invoices',[]);invs.push(inv);save('invoices',invs);
+  nextFactNum++;save('nextFactNum',nextFactNum);
+  // Mark devis as accepted
+  dev.status='accepte';save('devisList',devs);
+  // Add to revenue
+  factures.push({id:uid(),type:'facture',date:inv.date,client:inv.clientName,desc:inv.objet,ht:inv.totalHT,tva:20,cat:'Prestation service',paye:false,src:'facture'});
+  persist();window._factTab='factures';renderPage();
+  alert('Facture F-'+String(inv.num).padStart(4,'0')+' creee a partir du devis !');
 };
 
 window.dlInvoicePDF=(num)=>{
