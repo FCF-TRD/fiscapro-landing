@@ -1003,6 +1003,8 @@ function renderDashboard(el){
 
   ${renderComparaison()}
 
+  ${renderAnomalies()}
+
   ${renderTresoreriePredictive(c)}
 
   ${bank?`
@@ -4307,6 +4309,142 @@ function renderCreation_old(el){
   </div>`;
 }
 
+// ============ ANOMALIES DETECTION ============
+function renderAnomalies(){
+  const fExo=facturesExo(),dExo=depensesExo();
+  const all=[...fExo.map(f=>({...f,_type:'facture'})),...dExo.map(d=>({...d,_type:'depense'}))];
+  if(all.length===0)return'';
+  const anomalies=[];
+
+  // 1. DOUBLONS — same date + same amount + similar description (first 15 chars)
+  const checkDoublons=(arr,label)=>{
+    for(let i=0;i<arr.length;i++){
+      for(let j=i+1;j<arr.length;j++){
+        const a=arr[i],b=arr[j];
+        if(a.date===b.date&&Math.abs((a.ht||0)-(b.ht||0))<0.01){
+          const da=(a.desc||a.client||'').substring(0,15).toLowerCase();
+          const db=(b.desc||b.client||'').substring(0,15).toLowerCase();
+          if(da&&db&&da===db){
+            anomalies.push({severity:'critique',icon:'\uD83D\uDD34',title:'Doublon '+label,
+              desc:`Deux ${label}s identiques : m\xEAme date, m\xEAme montant, description similaire`,
+              entries:[a,b],
+              fix:'V\xE9rifiez si l\'une des deux \xE9critures est en double et supprimez-la.'});
+          }
+        }
+      }
+    }
+  };
+  checkDoublons(fExo,'recette');checkDoublons(dExo,'d\xE9pense');
+
+  // 2. MONTANTS SUSPECTS — expenses > 10 000 EUR
+  dExo.forEach(d=>{
+    if((d.ht||0)>10000){
+      anomalies.push({severity:'attention',icon:'\uD83D\uDFE1',title:'Montant suspect',
+        desc:`D\xE9pense sup\xE9rieure \xE0 10 000 \u20AC en une seule transaction`,
+        entries:[d],
+        fix:'Assurez-vous que ce montant est correct et conservez le justificatif.'});
+    }
+  });
+
+  // 3. ECRITURES SANS CATEGORIE
+  all.forEach(e=>{
+    if(!e.cat||e.cat==='Autre'){
+      anomalies.push({severity:'info',icon:'\uD83D\uDD35',title:'\xC9criture sans cat\xE9gorie',
+        desc:`${e._type==='facture'?'Recette':'D\xE9pense'} class\xE9e "${e.cat||'vide'}"`,
+        entries:[e],
+        fix:'Attribuez une cat\xE9gorie pr\xE9cise pour un meilleur suivi comptable.'});
+    }
+  });
+
+  // 4. TROUS DE NUMEROTATION (invoices)
+  try{
+    const invs=load('invoices',[]).filter(i=>i.date&&new Date(i.date).getFullYear()===currentExercice);
+    if(invs.length>1){
+      const nums=invs.map(i=>i.num).filter(n=>typeof n==='number').sort((a,b)=>a-b);
+      const gaps=[];
+      for(let i=1;i<nums.length;i++){
+        if(nums[i]-nums[i-1]>1){
+          for(let g=nums[i-1]+1;g<nums[i];g++)gaps.push(g);
+        }
+      }
+      if(gaps.length>0){
+        anomalies.push({severity:'critique',icon:'\uD83D\uDD34',title:'Trous de num\xE9rotation',
+          desc:`Num\xE9ros de facture manquants : ${gaps.slice(0,10).map(g=>'F-'+String(g).padStart(4,'0')).join(', ')}${gaps.length>10?' ...(+'+(gaps.length-10)+')':''}`,
+          entries:[],
+          fix:'La num\xE9rotation des factures doit \xEAtre continue. Cr\xE9ez les factures manquantes ou justifiez les trous.'});
+      }
+    }
+  }catch(e){}
+
+  // 5. WEEKEND ENTRIES
+  all.forEach(e=>{
+    if(!e.date)return;
+    const day=new Date(e.date).getDay();
+    if(day===0||day===6){
+      anomalies.push({severity:'info',icon:'\uD83D\uDD35',title:'\xC9criture le week-end',
+        desc:`${e._type==='facture'?'Recette':'D\xE9pense'} enregistr\xE9e un ${day===0?'dimanche':'samedi'}`,
+        entries:[e],
+        fix:'V\xE9rifiez que la date est correcte. Les transactions le week-end sont inhabituelles.'});
+    }
+  });
+
+  // 6. DESEQUILIBRE MENSUEL — months where expenses > 3x average
+  const monthlyDep=new Array(12).fill(0);
+  dExo.forEach(d=>{if(d.date){const m=new Date(d.date).getMonth();monthlyDep[m]+=(d.ht||0);}});
+  const activeMonths=monthlyDep.filter(v=>v>0);
+  if(activeMonths.length>2){
+    const avg=activeMonths.reduce((s,v)=>s+v,0)/activeMonths.length;
+    const mNames=['Janvier','F\xE9vrier','Mars','Avril','Mai','Juin','Juillet','Ao\xFBt','Septembre','Octobre','Novembre','D\xE9cembre'];
+    monthlyDep.forEach((v,i)=>{
+      if(v>avg*3&&avg>0){
+        anomalies.push({severity:'attention',icon:'\uD83D\uDFE1',title:'D\xE9s\xE9quilibre mensuel',
+          desc:`${mNames[i]} : ${fmt(v)} de d\xE9penses vs moyenne ${fmt(Math.round(avg))}`,
+          entries:[],
+          fix:'Analysez les d\xE9penses de ce mois pour identifier une charge exceptionnelle.'});
+      }
+    });
+  }
+
+  if(anomalies.length===0)return'';
+
+  // Deduplicate weekend/sans-categorie: group by title, show max 3 entries per group
+  const grouped={};
+  anomalies.forEach(a=>{
+    const key=a.title;
+    if(!grouped[key])grouped[key]={...a,allEntries:[...a.entries],count:1};
+    else{grouped[key].allEntries.push(...a.entries);grouped[key].count++;}
+  });
+  const items=Object.values(grouped);
+  const total=anomalies.length;
+
+  const sevOrder={critique:0,attention:1,info:2};
+  items.sort((a,b)=>(sevOrder[a.severity]||9)-(sevOrder[b.severity]||9));
+
+  return`<div class="cd" style="margin-bottom:16px;border-left:3px solid var(--red);background:linear-gradient(135deg,var(--bg2),rgba(220,53,69,.03))">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <span style="font-size:18px">\uD83D\uDD0D</span>
+      <span style="font-size:14px;font-weight:800;letter-spacing:.5px">Anomalies d\xE9tect\xE9es (${total})</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+    ${items.map(a=>{
+      const sevColor=a.severity==='critique'?'var(--red)':a.severity==='attention'?'#F59E0B':'var(--blu)';
+      const sevBg=a.severity==='critique'?'rgba(220,53,69,.06)':a.severity==='attention'?'rgba(245,158,11,.06)':'rgba(59,130,246,.06)';
+      const shown=a.allEntries.slice(0,3);
+      return`<div style="background:${sevBg};border-radius:8px;padding:10px 12px;border:1px solid ${sevColor}22">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="font-size:14px">${a.icon}</span>
+          <span style="font-size:12px;font-weight:700;color:${sevColor}">${a.severity.toUpperCase()}</span>
+          <span style="font-size:12px;font-weight:700">${a.title}${a.count>1?' (\xD7'+a.count+')':''}</span>
+        </div>
+        <div style="font-size:11px;color:var(--tx2);margin-bottom:6px">${a.desc}</div>
+        ${shown.length>0?`<div style="font-size:10px;color:var(--tx3);font-family:monospace;margin-bottom:4px">${shown.map(e=>`${fmtD(e.date)} | ${fmt(e.ht||0)} | ${(e.desc||e.client||'').substring(0,35)}`).join('<br>')}${a.allEntries.length>3?'<br>... +'+(a.allEntries.length-3)+' autres':''}</div>`:''}
+        <div style="font-size:10px;color:var(--acc);font-style:italic">\u2192 ${a.fix}</div>
+      </div>`;
+    }).join('')}
+    </div>
+  </div>`;
+}
+
 // ============ COMPARAISON N vs N-1 ============
 function renderComparaison(){
   const exos=getExercices();
@@ -5669,6 +5807,8 @@ function renderAssistant(el){
         ${buildSuggestions().map(s=>`<button onclick="askAI(this.textContent)">${s}</button>`).join('')}
       </div>`:''}
       <div class="chat-input">
+        <button class="bt bt-s sm" onclick="document.getElementById('chatFile').click()" style="flex-shrink:0" title="Joindre un PDF ou une image">📎</button>
+        <input type="file" id="chatFile" accept=".pdf,image/*" style="display:none" onchange="handleChatFile(this.files[0])">
         <input class="inp" id="chatIn" placeholder="Pose ta question..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();askAI($('#chatIn').value);}">
         <button class="bt bt-p" onclick="askAI($('#chatIn').value)">→</button>
       </div>
@@ -5689,9 +5829,85 @@ function formatAI(text){
     .replace(/\n/g,'<br>');
 }
 
+window._chatFileContext=null;
+window.handleChatFile=async function(file){
+  if(!file)return;
+  const msgs=$('#chatMsgs');
+  const isImage=/^image\//.test(file.type);
+  const isPDF=file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf');
+  if(!isImage&&!isPDF){alert('Format non supporté. Utilise un PDF ou une image.');return;}
+  // Show loading in chat
+  if(msgs)msgs.innerHTML+=`<div class="chat-msg user" id="chatFileLoading"><span class="spin" style="display:inline-block">⏳</span> Lecture de ${file.name}...</div>`;
+  if(msgs)msgs.scrollTop=msgs.scrollHeight;
+  try{
+    let text='';let pageCount=0;
+    if(isPDF){
+      // Load pdf.js if needed
+      if(!window.pdfjsLib){
+        const s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+        document.head.appendChild(s);
+        await new Promise((ok,ko)=>{s.onload=ok;s.onerror=ko;setTimeout(ko,15000);});
+        pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const buf=await file.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      pageCount=pdf.numPages;
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const tc=await page.getTextContent();
+        const rows={};
+        tc.items.forEach(it=>{
+          if(!it.str||!it.str.trim())return;
+          const y=Math.round(it.transform[5]);
+          if(!rows[y])rows[y]=[];
+          rows[y].push({x:it.transform[4],str:it.str});
+        });
+        Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+          text+=rows[y].sort((a,b)=>a.x-b.x).map(it=>it.str).join(' ')+'\n';
+        });
+      }
+    }else{
+      // Image: OCR with Tesseract.js
+      if(!window.Tesseract){
+        const s=document.createElement('script');
+        s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        document.head.appendChild(s);
+        await new Promise((ok,ko)=>{s.onload=ok;s.onerror=ko;setTimeout(ko,20000);});
+      }
+      const worker=await Tesseract.createWorker('fra');
+      const{data}=await worker.recognize(file);
+      await worker.terminate();
+      text=data.text||'';
+      pageCount=1;
+    }
+    if(!text.trim()){
+      const el=$('#chatFileLoading');
+      if(el)el.outerHTML=`<div class="chat-msg user" style="color:var(--red)">❌ Aucun texte extrait de ${file.name}.</div>`;
+      return;
+    }
+    window._chatFileContext=text.trim();
+    const label=isPDF?`📄 Fichier: ${file.name} (${pageCount} page${pageCount>1?'s':''} extraite${pageCount>1?'s':''})`:`🖼️ Image: ${file.name} (texte extrait par OCR)`;
+    const el=$('#chatFileLoading');
+    if(el)el.outerHTML=`<div class="chat-msg user">${label}</div>`;
+    if(msgs)msgs.scrollTop=msgs.scrollHeight;
+    // Focus the input so user can type their question
+    const input=$('#chatIn');if(input)input.focus();
+  }catch(e){
+    const el=$('#chatFileLoading');
+    if(el)el.outerHTML=`<div class="chat-msg user" style="color:var(--red)">❌ Erreur lecture: ${e.message}</div>`;
+  }
+  // Reset file input so same file can be re-selected
+  const fi=document.getElementById('chatFile');if(fi)fi.value='';
+};
+
 window.askAI=async(question)=>{
   if(!question||!question.trim())return;
   question=question.trim();
+  if(window._chatFileContext){
+    question="DOCUMENT JOINT:\n"+window._chatFileContext+"\n\nQUESTION: "+question;
+    window._chatFileContext=null;
+  }
   const input=$('#chatIn');if(input)input.value='';
   const sug=$('#chatSug');if(sug)sug.remove();
 
