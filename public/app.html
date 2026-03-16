@@ -1008,6 +1008,256 @@ window.dlFEC=()=>{
 };
 
 // ============ OPTIMISATION ============
+// ============ AIDES & SUBVENTIONS ============
+function getAides(ape,type,company,c){
+  const a=(ape||'').replace(/[.\s]/g,'');
+  const age=company.dateCreation?((Date.now()-new Date(company.dateCreation))/(365.25*86400000)):3;
+  const nom=company.nom||'Ta societe';
+  const aides=[];
+  const mk=(titre,montant,qui,comment,lien,tags)=>({titre,montant,qui,comment,lien:lien||'',tags:tags||[]});
+
+  // ═══ UNIVERSELLES (toutes entreprises) ═══
+  aides.push(mk('ACRE — Exoneration charges 1ere annee','Jusqu\'a 50% d\'exoneration','Toute creation/reprise < 12 mois',
+    'Exoneration partielle de cotisations sociales la 1ere annee. Automatique pour les micro-entrepreneurs, sur demande pour les autres. Concerne : maladie, maternite, retraite de base, invalidite-deces.',
+    'https://www.service-public.fr/professionnels-entreprises/vosdroits/F11677',['Creation','Charges']));
+  aides.push(mk('Pret d\'honneur BPI France','5 000 a 50 000 € a taux zero','Createurs et repreneurs',
+    'Pret personnel sans garantie ni caution a taux 0%. Renforce tes fonds propres pour obtenir un pret bancaire (effet levier x7). Reseaux : Initiative France, Reseau Entreprendre.',
+    'https://bpifrance-creation.fr',['Creation','Pret']));
+  aides.push(mk('Garantie BPI France','Jusqu\'a 70% du pret garanti','Toute entreprise',
+    'BPI garantit ton pret bancaire a hauteur de 70%. La banque prend moins de risque → elle te prete plus facilement. Demande faite par ta banque directement.',
+    'https://www.bpifrance.fr/nos-solutions/garanties',['Financement','Banque']));
+  aides.push(mk('Aide a l\'embauche — France Travail','Jusqu\'a 8 000 €/embauche','Toute entreprise qui recrute',
+    'Aide forfaitaire pour l\'embauche de demandeurs d\'emploi, jeunes < 26 ans, seniors, travailleurs handicapes. Montant variable selon le profil et le contrat.',
+    'https://www.francetravail.fr/employeur/aides-aux-recrutements.html',['Embauche','RH']));
+  aides.push(mk('Credit d\'impot formation dirigeant','475 a 950 €/an','Tout dirigeant en formation',
+    '40h x SMIC horaire. Double pour les TPE < 10 salaries (950€). Tu suis une formation pro ? Recupere un credit d\'impot. Formulaire 2069-RCI.',
+    '',['Formation','Credit impot']));
+  aides.push(mk('Cheque numerique — France Num','Jusqu\'a 8 000 €','TPE/PME < 50 salaries',
+    'Subvention pour ta transformation numerique : site web, logiciel de gestion, cybersecurite, e-commerce. Prise en charge 50% des depenses.',
+    'https://www.francenum.gouv.fr',['Numerique','Subvention']));
+  aides.push(mk('FDES (Fonds de developpement eco. et social)','Variable','Entreprise en difficulte',
+    'Pret du Tresor pour les entreprises en difficulte. Dernier recours avant la cessation de paiement. Demande aupres du CODEFI/CIRI.',
+    '',['Difficulte','Urgence']));
+
+  if(age<3){
+    aides.push(mk('ARCE — Capital France Travail','45% des droits restants','Demandeur d\'emploi createur',
+      'Si tu crées ta boite en etant au chomage, tu peux recevoir 45% de tes allocations restantes en capital (en 2 fois). Alternative au maintien ARE.',
+      '',['Creation','Chomage']));
+    aides.push(mk('NACRE — Accompagnement creation','Pret a taux zero jusqu\'a 10 000 €','Createur < 3 ans',
+      'Accompagnement en 3 phases : montage du projet, structuration financiere, demarrage. Inclut un pret a taux zero cumulable avec le pret d\'honneur.',
+      '',['Creation','Accompagnement']));
+  }
+
+  // ═══ PAR SECTEUR APE ═══
+
+  // Formation (85xx)
+  if(/^85/.test(a)){
+    aides.push(mk('Financement OPCO','100% de la formation financee','OF avec NDA',
+      `${nom} peut faire financer ses formations par les OPCO de ses clients. 11 OPCO en France (AKTO, OPCO EP, AFDAS, Atlas...). Le client ne paye rien, l\'OPCO paye la facture.`,
+      'https://travail-emploi.gouv.fr/ministere/acteurs/partenaires/opco',['Formation','OPCO']));
+    aides.push(mk('CPF (Compte Personnel de Formation)','Paiement direct par la CDC','OF Qualiopi uniquement',
+      'Tes clients peuvent utiliser leur CPF pour payer ta formation. Paiement par la Caisse des Depots. Inscription sur moncompteformation.gouv.fr obligatoire.',
+      'https://www.moncompteformation.gouv.fr',['Formation','CPF']));
+    aides.push(mk('FNE-Formation','Jusqu\'a 70% pris en charge','OF pendant activite partielle',
+      'Aide de l\'Etat pour financer la formation des salaries en activite partielle ou en difficulte. Demande via la DREETS.',
+      '',['Formation','Crise']));
+    aides.push(mk('Plan de developpement des competences','Budget employeur','Toutes entreprises clientes',
+      'Les entreprises de tes clients doivent former leurs salaries. Budget PDC obligatoire. Demande aux DRH de tes clients prospects.',
+      '',['Formation','Commercial']));
+  }
+
+  // IT / Numerique (58xx, 62xx, 63xx)
+  if(/^58|^62|^63/.test(a)){
+    aides.push(mk('CIR — Credit Impot Recherche','30% des depenses R&D','Toute entreprise qui innove',
+      'L\'Etat rembourse 30% de tes depenses de R&D : salaires devs (x200% forfait), materiel, sous-traitance agreee. Un dev a 45K = 13 500€ de credit.',
+      '',['R&D','30%']));
+    aides.push(mk('CII — Credit Impot Innovation','20% (max 80 000 €/an)','PME < 250 salaries',
+      'Conception de prototypes, produits nouveaux. 20% des depenses plafonnees a 400K€. Cumulable avec le CIR.',
+      '',['Innovation','PME']));
+    aides.push(mk('JEI — Jeune Entreprise Innovante','Exoneration charges sociales','Entreprise < 8 ans, 20%+ R&D',
+      `${nom} a ${age.toFixed(0)} an${age>=2?'s':''}. ${age<8?'Eligible !':'Trop ancienne.'}. Exoneration des charges patronales sur les salaires R&D pendant 7 ans.`,
+      '',['R&D','Charges',age<8?'Eligible':'Expire']));
+    aides.push(mk('Bourse French Tech','Jusqu\'a 90 000 €','Startup innovante',
+      'Subvention BPI pour les startups en phase d\'amorcage. Pas de remboursement. Dossier de candidature aupres de BPI France.',
+      'https://www.bpifrance.fr/nos-solutions/toutes-nos-solutions/bourse-french-tech',['Startup','Subvention']));
+    aides.push(mk('Pass French Tech','Accompagnement premium','Hypercroissance',
+      'Accompagnement BPI pour les entreprises en hypercroissance (>30%/an). Acces privilegia aux aides, mentoring, mise en relation.',
+      '',['Startup','Croissance']));
+    aides.push(mk('Aide au recrutement tech — APEC','Accompagnement gratuit','Recrutement cadres tech',
+      'L\'APEC aide gratuitement les PME a recruter des cadres techniques. Diffusion offre, pre-selection, conseil.',
+      'https://www.apec.fr',['Recrutement','Tech']));
+  }
+
+  // Commerce (45xx-47xx)
+  if(/^4[567]/.test(a)){
+    aides.push(mk('FISAC — Fonds commerce de proximite','Subvention variable','Commerce de proximite',
+      'Aide pour l\'amenagement, la modernisation ou la securisation de ton commerce. Dossier en mairie ou communaute de communes.',
+      '',['Commerce','Modernisation']));
+    aides.push(mk('Aide a la numerisation commerce','Jusqu\'a 5 000 €','Petit commerce',
+      'Site e-commerce, click & collect, caisse connectee. Subvention regionale + France Num.',
+      '',['Commerce','Numerique']));
+    aides.push(mk('Exoneration ZFU/QPV','Exoneration IS 5 ans','Commerce en zone prioritaire',
+      'Si ton commerce est en Zone Franche Urbaine ou Quartier Prioritaire : exoneration IS, CFE et charges sociales pendant 5 ans.',
+      '',['Commerce','Zone']));
+  }
+
+  // BTP (41xx-43xx)
+  if(/^4[123]/.test(a)){
+    aides.push(mk('Aide Pro-BTP','Aides sociales + formation','Entreprise BTP',
+      'Pro-BTP offre des aides specifiques : mutuelle avantageuse, formation securite, aides au logement pour les compagnons.',
+      '',['BTP','Social']));
+    aides.push(mk('Eco-pret a taux zero (Eco-PTZ)','Jusqu\'a 50 000 €','Travaux renovation energetique',
+      'Tes clients peuvent beneficier d\'un Eco-PTZ pour financer tes travaux. Argument commercial puissant.',
+      '',['BTP','Renovation']));
+    aides.push(mk('MaPrimeRenov\'','Jusqu\'a 20 000 € pour ton client','Travaux energie',
+      'Aide directe au particulier pour la renovation. Tu es paye directement, le client recoit l\'aide apres. Etre RGE = obligatoire.',
+      '',['BTP','Energie']));
+    aides.push(mk('Label RGE','Acces aux marches aides','Artisan BTP',
+      'Sans le label RGE (Reconnu Garant Environnement), tes clients ne peuvent pas beneficier des aides (MaPrimeRenov, CEE). Le RGE ouvre le marche.',
+      '',['BTP','Label']));
+  }
+
+  // Restauration / Hebergement (55xx, 56xx)
+  if(/^5[56]/.test(a)){
+    aides.push(mk('TVA reduite 10% restauration','Economie sur la TVA','Restauration sur place',
+      'La restauration sur place beneficie du taux de TVA reduit a 10% (au lieu de 20%). La vente a emporter de plats prepares aussi.',
+      '',['Restauration','TVA']));
+    aides.push(mk('Aide UMIH / GNI','Aides sectorielles','Adherent syndicat',
+      'Les syndicats de l\'hotellerie-restauration (UMIH, GNI) offrent des aides juridiques, des negociations collectives, et des outils de gestion gratuits.',
+      '',['Restauration','Syndicat']));
+    aides.push(mk('Exoneration avantage repas','~5€/repas au lieu du reel','Salaries restauration',
+      'Les repas pris par les salaries en restauration sont evalues forfaitairement (~5,20€) au lieu de la valeur reelle. Moins de charges.',
+      '',['Restauration','Social']));
+  }
+
+  // Sante (86xx-88xx)
+  if(/^8[678]/.test(a)){
+    aides.push(mk('Contrat d\'aide a l\'installation (CAIM)','Jusqu\'a 50 000 €','Medecins zone sous-dense',
+      'Aide a l\'installation dans les deserts medicaux. 50 000€ de prime + exonerations fiscales.',
+      '',['Sante','Installation']));
+    aides.push(mk('Exoneration ZRR','Exoneration IR/IS 5 ans','Professionnel zone rurale',
+      'Installation en Zone de Revitalisation Rurale = exoneration d\'impot sur les benefices pendant 5 ans (degressive ensuite).',
+      '',['Sante','Rural']));
+  }
+
+  // Agriculture (01xx-03xx)
+  if(/^0[123]/.test(a)){
+    aides.push(mk('PAC — Aides directes','Variable','Exploitant agricole',
+      'Aides directes de la PAC (Politique Agricole Commune) : DPB, aide verte, paiement redistributif. Demande via telepac.agriculture.gouv.fr.',
+      '',['Agriculture','EU']));
+    aides.push(mk('DJA — Dotation Jeune Agriculteur','10 000 a 40 000 €','Agriculteur < 40 ans',
+      'Aide a l\'installation pour les jeunes agriculteurs. Montant variable selon la zone et le projet.',
+      '',['Agriculture','Installation']));
+  }
+
+  // Industrie (10xx-33xx)
+  if(/^[12][0-9]|^3[0-3]/.test(a)){
+    aides.push(mk('Suramortissement industriel','40% en plus','PME industrielle',
+      'Quand tu achetes un robot, une machine-outil, un logiciel industriel : tu deduis 40% en plus de l\'amortissement normal. Un investissement de 100K€ = 140K€ de deduction.',
+      '',['Industrie','Investissement']));
+    aides.push(mk('France 2030 — Industrie verte','Subventions variables','Projet industriel innovant',
+      'Plan d\'investissement France 2030 pour la reindustrialisation. Appels a projets reguliers : usines du futur, decarbonation, souverainete.',
+      'https://www.gouvernement.fr/france-2030',['Industrie','Innovation']));
+    aides.push(mk('ADEME — Aide transition ecologique','Subvention ou pret','Entreprise industrielle',
+      'L\'ADEME finance la transition ecologique : efficacite energetique, economie circulaire, mobilite durable. Diagnostic gratuit + aides a l\'investissement.',
+      'https://agirpourlatransition.ademe.fr/entreprises',['Industrie','Ecologie']));
+  }
+
+  // Transport (49xx-53xx)
+  if(/^[45][0-3]|^49/.test(a)){
+    aides.push(mk('Aide au verdissement flotte','Jusqu\'a 40 000 €/vehicule','Transporteur',
+      'Subvention pour l\'achat de vehicules propres (electrique, hydrogene, GNV). ADEME + bonus ecologique cumules.',
+      '',['Transport','Ecologie']));
+  }
+
+  // Arts / Culture / Sport (90xx-93xx)
+  if(/^9[0-3]/.test(a)){
+    aides.push(mk('Aides CNM / CNC / CNL','Subventions creation','Artiste / Producteur',
+      'Centre National de la Musique, du Cinema, du Livre : subventions a la creation, a la production, a la diffusion. Selon ton domaine.',
+      '',['Culture','Creation']));
+    aides.push(mk('Credit d\'impot spectacle vivant','15-30% des depenses','Producteur spectacle',
+      'Credit d\'impot pour les depenses de creation, d\'exploitation et de numerisation de spectacles. Agrement CNC/CNM necessaire.',
+      '',['Culture','Credit impot']));
+  }
+
+  // ═══ AIDES REGIONALES (universelles) ═══
+  aides.push(mk('Aides regionales — ta region','Variable','Toute entreprise',
+    'Chaque region a ses propres dispositifs : prets, subventions, accompagnement. Contacte ta CCI ou ta region directement.',
+    'https://les-aides.fr',['Region','Variable']));
+  aides.push(mk('CCI / CMA — Accompagnement gratuit','Gratuit','Tout entrepreneur',
+    'Ta Chambre de Commerce (CCI) ou Chambre des Metiers (CMA) offre des rendez-vous gratuits : conseil fiscal, juridique, commercial, export.',
+    '',['Accompagnement','Gratuit']));
+
+  return aides;
+}
+
+function renderAides(el){
+  const c=compute();const t=TYPES[company?.type]||TYPES.SAS;
+  const aides=getAides(company.ape,company.type,company,c);
+  const apeLabel=company.apeLabel||getAPELabel(company.ape)||'ton activite';
+  const a=(company.ape||'').replace(/[.\s]/g,'');
+
+  // Group by tags to identify sector-specific vs universal
+  const sectorAides=aides.filter(a=>!['Creation','Financement','Accompagnement','Region','Embauche','Numerique','Difficulte','Credit impot','Chomage'].some(t=>a.tags.includes(t))||a.tags.some(t=>['Formation','BTP','Commerce','Restauration','Sante','Agriculture','Industrie','Transport','Culture','R&D','Startup','Dev'].includes(t)));
+  const universalAides=aides.filter(a=>!sectorAides.includes(a));
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🎁 Aides & Subventions</h2><div class="top-s">Aides personnalisees pour ${company.nom||'ta societe'} — ${apeLabel}</div></div>
+    <button class="bt bt-p sm" onclick="goTo('assistant')">💬 Demander a l'IA</button>
+  </div>
+
+  <div class="al al-s" style="margin-bottom:16px"><span>🎯</span><span><b>${aides.length} aides identifiees</b> pour ${company.nom||'ta societe'} (${company.type}, APE ${company.ape||'non renseigne'}). Clique sur chaque aide pour voir les details.</span></div>
+
+  ${sectorAides.length>0?`
+  <div class="cd" style="margin-bottom:8px;padding:12px 16px;border-left:3px solid var(--acc)">
+    <div style="font-size:15px;font-weight:800;color:var(--acc)">🎯 Specifique a ${apeLabel}</div>
+    <div style="font-size:11px;color:var(--tx3)">Ces aides concernent directement ton secteur d'activite</div>
+  </div>
+  ${sectorAides.map((a,i)=>aideCard(a,'s'+i)).join('')}
+  `:''}
+
+  <div class="cd" style="margin-bottom:8px;padding:12px 16px;margin-top:20px;border-left:3px solid var(--blu)">
+    <div style="font-size:15px;font-weight:800;color:var(--blu)">🌍 Aides universelles</div>
+    <div style="font-size:11px;color:var(--tx3)">Accessibles a toutes les entreprises en France</div>
+  </div>
+  ${universalAides.map((a,i)=>aideCard(a,'u'+i)).join('')}
+
+  <div class="cd" style="margin-top:20px;text-align:center;padding:24px">
+    <div style="font-size:28px;margin-bottom:8px">🔍</div>
+    <div style="font-size:14px;font-weight:700;margin-bottom:6px">Tu veux chercher d'autres aides ?</div>
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:14px">Ces sites referent toutes les aides disponibles en France</div>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <a href="https://les-aides.fr" target="_blank" rel="noopener" class="bt bt-s sm">les-aides.fr (BPI)</a>
+      <a href="https://www.aides-entreprises.fr" target="_blank" rel="noopener" class="bt bt-s sm">aides-entreprises.fr</a>
+      <a href="https://www.service-public.fr/professionnels-entreprises" target="_blank" rel="noopener" class="bt bt-s sm">service-public.fr</a>
+    </div>
+  </div>`;
+}
+
+function aideCard(a,id){
+  return`<div class="cd" style="padding:0;margin-bottom:6px;overflow:hidden;cursor:pointer" onclick="document.getElementById('aide_${id}').classList.toggle('hide')">
+    <div style="padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;margin-bottom:2px">${a.titre}</div>
+          <div style="font-size:11px;color:var(--tx3)">${a.qui}</div>
+        </div>
+        <div style="flex-shrink:0;display:flex;align-items:center;gap:6px">
+          <span style="padding:3px 8px;background:rgba(10,104,71,.08);border-radius:5px;font-weight:800;color:var(--grn);font-size:11px;white-space:nowrap">${a.montant}</span>
+          <span style="color:var(--tx3)">▸</span>
+        </div>
+      </div>
+    </div>
+    <div id="aide_${id}" class="hide" style="padding:0 14px 14px;border-top:1px solid var(--brd)">
+      <div style="font-size:12px;color:var(--tx2);line-height:1.7;padding-top:10px">${a.comment}</div>
+      <div style="display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;align-items:center">
+        ${a.tags.map(t=>`<span class="tg t-blu">${t}</span>`).join('')}
+        ${a.lien?`<a href="${a.lien}" target="_blank" rel="noopener" class="tg t-grn" style="margin-left:auto;text-decoration:none;cursor:pointer" onclick="event.stopPropagation()">🔗 En savoir plus</a>`:''}
+      </div>
+    </div>
+  </div>`;
+}
+
 function getSpecificOptis(ape,type,c,t,company){
   const mk=(ok,sv,t2,simple,detail,tags,why)=>({ok,sv:sv||0,t:t2,simple,detail,tags,why:why||''});
   const a=(ape||'').replace(/[.\s]/g,'');
@@ -1977,6 +2227,7 @@ render=function(){
       ${navItem('bilan','📋','Bilan')}
       ${navItem('previsionnel','📈','Previsionnel')}
       ${navItem('opti','⭐','Optimisation')}
+      ${navItem('aides','🎁','Aides & Subventions')}
       <div class="nav-s">Fiscal</div>
       ${navItem('echeancier','📅','Echeancier')}
       ${navItem('declarations','🏛️','Declarations')}
@@ -2006,6 +2257,7 @@ renderPage=function(){
     case'declarations':renderDeclarations(pg);break;
     case'assistant':renderAssistant(pg);break;
     case'opti':renderOpti(pg);break;
+    case'aides':renderAides(pg);break;
     case'agents':renderAgents(pg);break;
     case'simul':renderSimul(pg);break;
     case'veille':renderVeille(pg);break;
