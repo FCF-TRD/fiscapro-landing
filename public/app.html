@@ -188,6 +188,48 @@ const TYPES={
   MICRO:{l:'Micro',f:'Micro-Entreprise',dir:'Entrepreneur',social:'TNS simplifié',cp:.22,cs:0,tns:true,divCh:false,cap:0,em:'⚡'}
 };
 const F={IS:.25,ISR:.15,ISS:42500,TVA:.20,PFU:.30,CIR:.30,CII:.20,CESU:2540,MEC:.60,MECP:20000,IPBOX:.10,SURAMORT:.60};
+const ACTIVITES=[
+  {v:'services',l:'Prestations de services'},
+  {v:'ventes',l:'Vente de marchandises'},
+  {v:'liberal',l:'Profession liberale'},
+  {v:'mixte',l:'Mixte (services + ventes)'},
+  {v:'formation',l:'Formation professionnelle'},
+  {v:'tech',l:'Developpement informatique / SaaS'},
+  {v:'conseil',l:'Conseil aux entreprises'},
+  {v:'marketing',l:'Marketing / Communication / Pub'},
+  {v:'design',l:'Design / Graphisme / Web'},
+  {v:'photo',l:'Photographie / Video'},
+  {v:'restauration',l:'Restauration traditionnelle'},
+  {v:'fastfood',l:'Restauration rapide / Fast-food'},
+  {v:'traiteur',l:'Traiteur / Food truck'},
+  {v:'bar',l:'Bar / Debit de boissons'},
+  {v:'boulangerie',l:'Boulangerie / Patisserie'},
+  {v:'btp',l:'BTP / Construction'},
+  {v:'electricite',l:'Electricite / Plomberie / CVC'},
+  {v:'peinture',l:'Peinture / Revetements'},
+  {v:'menuiserie',l:'Menuiserie / Agencement'},
+  {v:'transport',l:'Transport routier marchandises'},
+  {v:'vtc',l:'VTC / Taxi'},
+  {v:'livraison',l:'Livraison / Coursier'},
+  {v:'demenagement',l:'Demenagement'},
+  {v:'commerce_alimentaire',l:'Commerce alimentaire'},
+  {v:'commerce_vetements',l:'Commerce de vetements'},
+  {v:'ecommerce',l:'E-commerce'},
+  {v:'commerce_auto',l:'Commerce / Reparation auto'},
+  {v:'immobilier',l:'Agence immobiliere'},
+  {v:'gestion_locative',l:'Gestion locative / SCI'},
+  {v:'nettoyage',l:'Nettoyage / Entretien'},
+  {v:'securite',l:'Securite privee'},
+  {v:'coiffure',l:'Coiffure / Esthetique / Beaute'},
+  {v:'sante',l:'Sante / Paramedical'},
+  {v:'sport',l:'Sport / Coach / Salle de sport'},
+  {v:'evenementiel',l:'Evenementiel / Spectacle'},
+  {v:'architecture',l:'Architecture / Ingenierie'},
+  {v:'avocat',l:'Avocat / Juridique'},
+  {v:'comptable',l:'Expertise comptable'},
+  {v:'agricole',l:'Agriculture / Elevage'},
+  {v:'import_export',l:'Import / Export / Negoce'},
+];
 const CATDEP=['Achat marchandises','Sous-traitance','Loyer/Charges','Fournitures bureau','Télécom/Internet','Assurance','Transport/Déplacement','Repas/Réception','Marketing/Pub','Logiciel/Abonnement','Honoraires','Formation','Banque/Frais','Impôts/Taxes','Salaires','Charges sociales','Autre'];
 const CATREV=['Prestation service','Vente marchandises','Licence/Redevance','Abonnement','Commission','Autre'];
 
@@ -570,7 +612,7 @@ function renderWizard(){
       <div id="tvaInfo" style="margin-top:4px;font-size:10px;color:var(--tx3);line-height:1.5"></div>
       </div>
     </div>
-    <div class="fg"><label>Type d'activité</label><select class="inp" onchange="wizSet('activite',this.value)"><option value="services" ${wizForm.activite==='services'?'selected':''}>Prestations de services</option><option value="ventes" ${wizForm.activite==='ventes'?'selected':''}>Ventes de marchandises</option><option value="liberal" ${wizForm.activite==='liberal'?'selected':''}>Profession libérale</option><option value="mixte" ${wizForm.activite==='mixte'?'selected':''}>Mixte</option></select></div>
+    <div class="fg"><label>Type d'activite</label><select class="inp" onchange="wizSet('activite',this.value)">${ACTIVITES.map(a=>`<option value="${a.v}" ${wizForm.activite===a.v?'selected':''}>${a.l}</option>`).join('')}</select></div>
     ${wizForm.capital===''||wizForm.capital===null?`<div class="fg"><label>Capital social (€)</label><input class="inp" type="number" placeholder="Ex: 200" value="" onchange="wizSet('capital',+this.value)"><div style="margin-top:4px;font-size:10px;color:var(--tx3)">Non trouvé via l'API — indique-le ou importe tes statuts plus tard</div></div>`:''}
     <div class="al al-i" style="margin-top:8px"><span>💡</span><span>La rémunération, la tranche IR et les autres paramètres avancés se configurent dans <b>Paramètres société</b> une fois dans l'application.</span></div>`
   ];
@@ -3763,7 +3805,7 @@ function renderCreation(el){
       </div></div>
     <div class="fg"><label>Type d'activite</label>
       <select class="inp" onchange="creaData.activite=this.value;saveCrea();renderPage()">
-        ${[{v:'services',l:'Prestations de services'},{v:'ventes',l:'Vente de marchandises'},{v:'liberal',l:'Profession liberale'},{v:'formation',l:'Formation professionnelle'},{v:'btp',l:'BTP / Artisanat'},{v:'restauration',l:'Restauration'},{v:'transport',l:'Transport'},{v:'tech',l:'Tech / IT / Startup'}].map(o=>`<option value="${o.v}" ${creaData.activite===o.v?'selected':''}>${o.l}</option>`).join('')}
+        ${ACTIVITES.map(o=>`<option value="${o.v}" ${creaData.activite===o.v?'selected':''}>${o.l}</option>`).join('')}
       </select></div>
     <div class="fg"><label>CA previsionnel annuel</label><input class="inp" type="number" placeholder="Ex: 50000" value="${creaData.ca_prevu}" onchange="creaData.ca_prevu=this.value;saveCrea();renderPage()"></div>
     <div class="fg"><label>Ce qui compte le plus pour toi</label>
@@ -4197,11 +4239,8 @@ function renderSettings(el){
           company.regimeTVA==='reel_normal'?'Déclaration CA3 mensuelle. Tu collectes et reverses la TVA chaque mois.':
           'Déclaration CA12 annuelle + 2 acomptes semestriels (juillet et décembre).'}
       </div>
-      <div class="fg"><label>Activité principale</label><select class="inp" onchange="updCompany('activite',this.value)">
-        <option value="services" ${company.activite==='services'?'selected':''}>Services</option>
-        <option value="ventes" ${company.activite==='ventes'?'selected':''}>Ventes de marchandises</option>
-        <option value="liberal" ${company.activite==='liberal'?'selected':''}>Profession libérale</option>
-        <option value="mixte" ${company.activite==='mixte'?'selected':''}>Mixte (services + ventes)</option>
+      <div class="fg"><label>Activite principale</label><select class="inp" onchange="updCompany('activite',this.value)">
+        ${ACTIVITES.map(a=>`<option value="${a.v}" ${company.activite===a.v?'selected':''}>${a.l}</option>`).join('')}
       </select></div>
       <div class="fg"><label>Rémunération brute/mois (€)</label><input class="inp" type="number" value="${company.rem||0}" onchange="updCompany('rem',+this.value)"></div>
       <div class="fg"><label>Tranche marginale IR</label><select class="inp" onchange="updCompany('trancheIR',this.value)">
