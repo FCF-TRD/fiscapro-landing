@@ -5025,6 +5025,14 @@ render=function(){
   <div class="side" id="sideNav">
     <div class="side-logo"><div class="ico">F</div><div><h1>FiscaPro</h1><small>Expert Comptable Virtuel</small></div></div>
     <div class="co-badge" onclick="goTo('settings')"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">${t.em}</span><div><div class="nm">${company.nom||'Ma Société'}</div><div class="tp">${t.f}</div></div><span style="margin-left:auto;font-size:12px;color:var(--tx3)">⚙️</span></div></div>
+    <div style="padding:0 8px 8px;display:flex;gap:4px">
+      <select class="inp" style="padding:4px 8px;font-size:10px;flex:1;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff" onchange="if(this.value==='_new'){addNewProfile();}else if(this.value){loadProfile(this.value);}" id="profileSelect">
+        <option value="">Profil actuel</option>
+        ${listProfiles().map(p=>'<option value="'+p+'">'+p+'</option>').join('')}
+        <option value="_new">+ Nouveau profil</option>
+      </select>
+      <button class="bt bt-s sm" style="padding:3px 6px;font-size:9px;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.15);color:#fff" onclick="saveCurrentProfile()">💾</button>
+    </div>
     <nav class="nav">
       ${navItem('dashboard','📊','Dashboard')}
       ${navItem('assistant','💬','Mon Expert IA')}
@@ -5054,6 +5062,7 @@ render=function(){
       ${navItem('archives','📦','Archives')}
       ${navItem('amortissements','🏭','Amortissements')}
       ${navItem('budget','🎯','Budget')}
+      ${navItem('stock','📦','Stock')}
       ${navItem('creation','🚀','Creer sa societe')}
       ${navItem('statuts','📜','Statuts')}
       ${navItem('urgence','🆘','Urgence')}
@@ -5099,6 +5108,7 @@ renderPage=function(){
     case'ged':renderGED(pg);break;
     case'amortissements':renderAmortissements(pg);break;
     case'budget':renderBudget(pg);break;
+    case'stock':renderStock(pg);break;
   }
 };
 
@@ -7205,6 +7215,243 @@ window.saveBudgetTargets=function(){
   const caObj=+($('#budgetCA')?$('#budgetCA').value:0)||0;
   const depMax=+($('#budgetDep')?$('#budgetDep').value:0)||0;
   save(budgetKey,{caObj:caObj,depMax:depMax});
+  renderPage();
+};
+
+// ============ FEATURE: MULTI-PROFILS ============
+function listProfiles(){
+  try{const s=localStorage.getItem('fp_profiles');return s?JSON.parse(s):[];}catch{return[];}
+}
+function saveProfileList(list){
+  try{localStorage.setItem('fp_profiles',JSON.stringify(list));}catch{}
+}
+window.saveCurrentProfile=function(){
+  const name=prompt('Nom du profil a sauvegarder :',company?company.nom:'Mon profil');
+  if(!name)return;
+  saveProfile(name);
+  alert('Profil "'+name+'" sauvegarde !');
+  render();
+};
+function saveProfile(name){
+  const data={};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith('fp_')&&k!=='fp_profiles'&&!k.startsWith('fp_profile_')){
+      data[k]=localStorage.getItem(k);
+    }
+  }
+  localStorage.setItem('fp_profile_'+name,JSON.stringify(data));
+  const list=listProfiles();
+  if(!list.includes(name)){list.push(name);saveProfileList(list);}
+}
+window.loadProfile=function(name){
+  if(!confirm('Charger le profil "'+name+'" ? Les donnees actuelles non sauvegardees seront perdues.'))return;
+  const raw=localStorage.getItem('fp_profile_'+name);
+  if(!raw){alert('Profil introuvable.');return;}
+  const data=JSON.parse(raw);
+  // Clear current fp_ keys (except profiles list and profile data)
+  const toRemove=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith('fp_')&&k!=='fp_profiles'&&!k.startsWith('fp_profile_'))toRemove.push(k);
+  }
+  toRemove.forEach(k=>localStorage.removeItem(k));
+  // Load profile data
+  Object.keys(data).forEach(k=>{if(k!=='fp_profiles'&&!k.startsWith('fp_profile_'))localStorage.setItem(k,data[k]);});
+  // Reload state
+  company=load('company',null);
+  factures=load('factures',[]);
+  depenses=load('depenses',[]);
+  currentExercice=load('currentExercice',new Date().getFullYear());
+  render();
+};
+window.addNewProfile=function(){
+  const name=prompt('Nom du nouveau profil :');
+  if(!name)return;
+  // Save current first
+  if(company){
+    const saveCurrent=confirm('Sauvegarder le profil actuel avant de creer le nouveau ?');
+    if(saveCurrent){saveProfile(company.nom||'Sans nom');}
+  }
+  // Clear current fp_ keys
+  const toRemove=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith('fp_')&&k!=='fp_profiles'&&!k.startsWith('fp_profile_'))toRemove.push(k);
+  }
+  toRemove.forEach(k=>localStorage.removeItem(k));
+  company=null;factures=[];depenses=[];
+  render(); // Will show wizard
+};
+window.deleteProfile=function(name){
+  if(!confirm('Supprimer le profil "'+name+'" ?'))return;
+  localStorage.removeItem('fp_profile_'+name);
+  const list=listProfiles().filter(p=>p!==name);
+  saveProfileList(list);
+  render();
+};
+
+// ============ FEATURE: GESTION DE STOCK ============
+function renderStock(el){
+  const products=load('stock_products',[]);
+  const movements=load('stock_movements',[]);
+  // Compute current quantities
+  const qtyMap={};
+  products.forEach(p=>{qtyMap[p.id]=(p.qteInitiale||0);});
+  movements.forEach(m=>{
+    if(!qtyMap[m.productId])qtyMap[m.productId]=0;
+    if(m.type==='entree')qtyMap[m.productId]+=(m.qte||0);
+    else qtyMap[m.productId]-=(m.qte||0);
+  });
+  // KPIs
+  const nbRefs=products.length;
+  let valeurTotale=0,margeSum=0,alertes=0;
+  products.forEach(p=>{
+    const qty=qtyMap[p.id]||0;
+    valeurTotale+=qty*(p.prixAchat||0);
+    if(p.prixVente&&p.prixAchat)margeSum+=((p.prixVente-p.prixAchat)/p.prixAchat)*100;
+    if(qty<=(p.seuilAlerte||0))alertes++;
+  });
+  const margeMoy=nbRefs?margeSum/nbRefs:0;
+
+  el.innerHTML=`
+  <div class="top"><div><h2>📦 Gestion de Stock</h2><div class="top-s">Suivi des produits, mouvements et alertes</div></div>
+    <button class="bt bt-p" onclick="document.getElementById('stockAddForm').classList.toggle('hide')">+ Ajouter un produit</button>
+  </div>
+
+  <div class="gr g4 kpi-grid" style="margin-bottom:16px">
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--acc)">${nbRefs}</div><div class="kpi-l">References</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--blu)">${fmt(valeurTotale)}</div><div class="kpi-l">Valeur du stock</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--grn)">${margeMoy.toFixed(1)}%</div><div class="kpi-l">Marge moyenne</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:${alertes?'var(--red)':'var(--grn)'}">${alertes}</div><div class="kpi-l">Alertes stock</div></div>
+  </div>
+
+  <div class="cd hide" id="stockAddForm">
+    <div class="cd-t">Nouveau produit</div>
+    <div class="gr g3">
+      <div class="fg"><label>Reference</label><input class="inp" id="stRef" placeholder="REF-001"></div>
+      <div class="fg"><label>Nom du produit</label><input class="inp" id="stNom" placeholder="Nom"></div>
+      <div class="fg"><label>Prix achat HT</label><input class="inp" type="number" id="stPrixAchat" step="0.01" placeholder="0.00"></div>
+      <div class="fg"><label>Prix vente HT</label><input class="inp" type="number" id="stPrixVente" step="0.01" placeholder="0.00"></div>
+      <div class="fg"><label>Quantite initiale</label><input class="inp" type="number" id="stQte" value="0"></div>
+      <div class="fg"><label>Seuil alerte</label><input class="inp" type="number" id="stSeuil" value="5"></div>
+    </div>
+    <button class="bt bt-p" onclick="addStockProduct()">Ajouter</button>
+    <button class="bt bt-s" onclick="document.getElementById('stockAddForm').classList.add('hide')" style="margin-left:6px">Annuler</button>
+  </div>
+
+  <div class="cd">
+    <div class="cd-t">Produits en stock</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Ref</th><th>Nom</th><th>Qte</th><th class="hide-mob">Prix achat</th><th class="hide-mob">Prix vente</th><th>Marge</th><th>Valeur</th><th>Etat</th><th></th></tr></thead>
+      <tbody>
+      ${products.length===0?'<tr><td colspan="9" style="text-align:center;color:var(--tx3);padding:24px">Aucun produit enregistre</td></tr>':''}
+      ${products.map(p=>{
+        const qty=qtyMap[p.id]||0;
+        const marge=p.prixVente&&p.prixAchat?((p.prixVente-p.prixAchat)/p.prixAchat*100).toFixed(1)+'%':'-';
+        const valeur=fmt2(qty*(p.prixAchat||0));
+        const alerte=qty<=(p.seuilAlerte||0);
+        return'<tr>'+
+          '<td style="font-weight:600">'+((p.ref||'-'))+'</td>'+
+          '<td>'+((p.nom||'-'))+'</td>'+
+          '<td style="font-weight:700">'+qty+'</td>'+
+          '<td class="hide-mob">'+fmt2(p.prixAchat||0)+'</td>'+
+          '<td class="hide-mob">'+fmt2(p.prixVente||0)+'</td>'+
+          '<td><span class="tg t-grn">'+marge+'</span></td>'+
+          '<td>'+valeur+'</td>'+
+          '<td>'+(alerte?'<span class="tg t-red">Alerte</span>':'<span class="tg t-grn">OK</span>')+'</td>'+
+          '<td><button class="bt bt-d sm" onclick="deleteStockProduct(\''+p.id+'\')">🗑</button></td></tr>';
+      }).join('')}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="cd">
+    <div class="cd-t">Mouvement de stock</div>
+    <div class="gr g4" style="margin-bottom:12px;align-items:end">
+      <div class="fg" style="margin-bottom:0"><label>Produit</label><select class="inp" id="mvProd">${products.map(p=>'<option value="'+p.id+'">'+((p.ref||''))+' - '+((p.nom||''))+'</option>').join('')}</select></div>
+      <div class="fg" style="margin-bottom:0"><label>Type</label><select class="inp" id="mvType"><option value="entree">Entree (achat)</option><option value="sortie">Sortie (vente)</option></select></div>
+      <div class="fg" style="margin-bottom:0"><label>Quantite</label><input class="inp" type="number" id="mvQte" value="1" min="1"></div>
+      <div class="fg" style="margin-bottom:0"><label>Motif</label><input class="inp" id="mvMotif" placeholder="Achat fournisseur..."></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <div class="fg" style="margin-bottom:0;width:160px"><label>Date</label><input class="inp" type="date" id="mvDate" value="${today()}"></div>
+      <button class="bt bt-p" onclick="addStockMovement()" style="align-self:flex-end">Enregistrer</button>
+    </div>
+  </div>
+
+  <div class="cd">
+    <div class="cd-t">Historique des mouvements</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Date</th><th>Produit</th><th>Type</th><th>Qte</th><th>Motif</th><th></th></tr></thead>
+      <tbody>
+      ${movements.length===0?'<tr><td colspan="6" style="text-align:center;color:var(--tx3);padding:24px">Aucun mouvement</td></tr>':''}
+      ${[...movements].reverse().map(m=>{
+        const p=products.find(x=>x.id===m.productId);
+        return'<tr>'+
+          '<td>'+fmtD(m.date)+'</td>'+
+          '<td>'+(p?(p.ref||'')+' - '+(p.nom||''):m.productId)+'</td>'+
+          '<td>'+(m.type==='entree'?'<span class="tg t-grn">Entree</span>':'<span class="tg t-red">Sortie</span>')+'</td>'+
+          '<td style="font-weight:700">'+((m.qte||0))+'</td>'+
+          '<td>'+((m.motif||'-'))+'</td>'+
+          '<td><button class="bt bt-d sm" onclick="deleteStockMovement(\''+m.id+'\')">🗑</button></td></tr>';
+      }).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+window.addStockProduct=function(){
+  const ref=$('#stRef')?$('#stRef').value.trim():'';
+  const nom=$('#stNom')?$('#stNom').value.trim():'';
+  const prixAchat=+($('#stPrixAchat')?$('#stPrixAchat').value:0)||0;
+  const prixVente=+($('#stPrixVente')?$('#stPrixVente').value:0)||0;
+  const qteInitiale=+($('#stQte')?$('#stQte').value:0)||0;
+  const seuilAlerte=+($('#stSeuil')?$('#stSeuil').value:5)||0;
+  if(!nom){alert('Veuillez saisir un nom de produit.');return;}
+  const products=load('stock_products',[]);
+  products.push({id:uid(),ref:ref,nom:nom,prixAchat:prixAchat,prixVente:prixVente,qteInitiale:qteInitiale,seuilAlerte:seuilAlerte});
+  save('stock_products',products);
+  renderPage();
+};
+window.deleteStockProduct=function(id){
+  if(!confirm('Supprimer ce produit ?'))return;
+  let products=load('stock_products',[]);
+  products=products.filter(p=>p.id!==id);
+  save('stock_products',products);
+  // Also remove movements for this product
+  let movements=load('stock_movements',[]);
+  movements=movements.filter(m=>m.productId!==id);
+  save('stock_movements',movements);
+  renderPage();
+};
+window.addStockMovement=function(){
+  const productId=$('#mvProd')?$('#mvProd').value:'';
+  const type=$('#mvType')?$('#mvType').value:'entree';
+  const qte=+($('#mvQte')?$('#mvQte').value:0)||0;
+  const motif=$('#mvMotif')?$('#mvMotif').value.trim():'';
+  const date=$('#mvDate')?$('#mvDate').value:today();
+  if(!productId){alert('Veuillez selectionner un produit.');return;}
+  if(qte<=0){alert('La quantite doit etre superieure a 0.');return;}
+  // Check stock for sortie
+  if(type==='sortie'){
+    const products=load('stock_products',[]);
+    const movements=load('stock_movements',[]);
+    const prod=products.find(p=>p.id===productId);
+    let currentQty=prod?(prod.qteInitiale||0):0;
+    movements.forEach(m=>{if(m.productId===productId){if(m.type==='entree')currentQty+=m.qte;else currentQty-=m.qte;}});
+    if(qte>currentQty){alert('Stock insuffisant. Quantite disponible : '+currentQty);return;}
+  }
+  const movements=load('stock_movements',[]);
+  movements.push({id:uid(),productId:productId,type:type,qte:qte,motif:motif,date:date});
+  save('stock_movements',movements);
+  renderPage();
+};
+window.deleteStockMovement=function(id){
+  if(!confirm('Supprimer ce mouvement ?'))return;
+  let movements=load('stock_movements',[]);
+  movements=movements.filter(m=>m.id!==id);
+  save('stock_movements',movements);
   renderPage();
 };
 
