@@ -173,6 +173,11 @@ tr:hover{background:var(--bg3)}
   .desk-only{display:block}
 }
 </style>
+<link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;FiscaPro&quot;,&quot;short_name&quot;:&quot;FiscaPro&quot;,&quot;start_url&quot;:&quot;.&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%23F8FAF9&quot;,&quot;theme_color&quot;:&quot;%230A6847&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='32' fill='%230A6847'/><text x='96' y='120' text-anchor='middle' fill='white' font-family='Arial' font-weight='900' font-size='120'>F</text></svg>&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/svg+xml&quot;}]}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FiscaPro">
+<meta name="theme-color" content="#0A6847">
 </head>
 <body>
 <div id="app"></div>
@@ -1004,6 +1009,8 @@ function renderDashboard(el){
   ${renderComparaison()}
 
   ${renderAnomalies()}
+
+  ${renderRapprochement()}
 
   ${renderTresoreriePredictive(c)}
 
@@ -2733,9 +2740,10 @@ function renderFacturation(el){
   <div class="tabs" style="margin-bottom:14px">
     <div class="tab ${factTab==='factures'?'on':''}" onclick="window._factTab='factures';renderPage()">Factures (${invs.length})</div>
     <div class="tab ${factTab==='devis'?'on':''}" onclick="window._factTab='devis';renderPage()">Devis (${devis.length})</div>
+    <div class="tab ${factTab==='clients'?'on':''}" onclick="window._factTab='clients';renderPage()">Clients</div>
   </div>
 
-  ${factTab==='devis'?`
+  ${factTab==='clients'?renderClientsTab(invs):factTab==='devis'?`
   ${devis.length===0?`<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">📝</div><p>Aucun devis</p></div>`:`
   <div class="cd">
   <div class="desk-only tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th class="hide-mob">Objet</th><th style="text-align:right">TTC</th><th>Statut</th><th></th></tr></thead><tbody>
@@ -4309,6 +4317,49 @@ function renderCreation_old(el){
   </div>`;
 }
 
+// ============ RAPPROCHEMENT BANCAIRE ============
+function renderRapprochement(){
+  const invs=load('invoices',[]).filter(i=>!i.paid);
+  if(!invs.length)return'';
+  const bankTxs=facturesExo().filter(f=>f.src==='banque');
+  if(!bankTxs.length)return'';
+  const matches=[];
+  invs.forEach(inv=>{
+    const invTTC=inv.totalTTC||0;
+    const invDate=new Date(inv.date);
+    bankTxs.forEach(tx=>{
+      const txTTC=(tx.ht||0)*(1+(tx.tva||0)/100);
+      if(Math.abs(invTTC-txTTC)<=1){
+        const txDate=new Date(tx.date);
+        const diffDays=Math.abs((invDate-txDate)/(86400000));
+        if(diffDays<=30){
+          matches.push({inv,tx,txTTC,diffDays});
+        }
+      }
+    });
+  });
+  if(!matches.length)return'';
+  return`<div class="cd" style="margin-bottom:16px;border-left:3px solid #3B82F6">
+    <div style="font-weight:700;margin-bottom:8px;font-size:15px">\uD83D\uDD17 Rapprochement bancaire</div>
+    <div style="font-size:13px;color:var(--t2);margin-bottom:10px">${matches.length} correspondance(s) trouvée(s)</div>
+    ${matches.map((m,i)=>{
+      const invNum='F-'+String(m.inv.num).padStart(4,'0');
+      return`<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;padding:8px;background:var(--bg2);border-radius:8px;margin-bottom:6px">
+        <span style="font-size:13px;flex:1;min-width:200px">${invNum} (${fmt(m.inv.totalTTC)}) \u2194 Transaction ${fmtD(m.tx.date)} ${(m.tx.desc||m.tx.client||'').substring(0,25)} (${fmt(m.txTTC)})</span>
+        <button class="bt bt-p sm" onclick="rapprocher(${m.inv.num},'${m.tx.id}')">Rapprocher</button>
+        <button class="bt bt-d sm" onclick="this.parentElement.remove()">Ignorer</button>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+window.rapprocher=(num,txId)=>{
+  const invs=load('invoices',[]);const inv=invs.find(i=>i.num===num);
+  if(inv){inv.paid=true;save('invoices',invs);}
+  const f=factures.find(f=>f.id===txId);
+  if(f)f.paye=true;
+  persist();renderPage();
+};
+
 // ============ ANOMALIES DETECTION ============
 function renderAnomalies(){
   const fExo=facturesExo(),dExo=depensesExo();
@@ -5001,6 +5052,8 @@ render=function(){
       ${navItem('compta','📒','Grand Livre')}
       ${navItem('ged','📁','Documents')}
       ${navItem('archives','📦','Archives')}
+      ${navItem('amortissements','🏭','Amortissements')}
+      ${navItem('budget','🎯','Budget')}
       ${navItem('creation','🚀','Creer sa societe')}
       ${navItem('statuts','📜','Statuts')}
       ${navItem('urgence','🆘','Urgence')}
@@ -5044,6 +5097,8 @@ renderPage=function(){
     case'embauche':renderEmbauche(pg);break;
     case'archives':renderArchives(pg);break;
     case'ged':renderGED(pg);break;
+    case'amortissements':renderAmortissements(pg);break;
+    case'budget':renderBudget(pg);break;
   }
 };
 
@@ -6852,6 +6907,305 @@ window.setGEDCat=(id,cat)=>{
   const docs=gedDocs();
   const doc=docs.find(d=>d.id===id);
   if(doc){doc.category=cat;saveGED(docs);}
+};
+
+// ============ CRM LIGHT — CLIENTS TAB ============
+function renderClientsTab(invs){
+  const clientsMap={};
+  invs.forEach(inv=>{
+    const name=(inv.clientName||'').trim();
+    if(!name)return;
+    if(!clientsMap[name])clientsMap[name]={name,totalFacture:0,totalPaye:0,totalImpaye:0,derniereFacture:null,count:0};
+    clientsMap[name].totalFacture+=inv.totalTTC||0;
+    if(inv.paid)clientsMap[name].totalPaye+=inv.totalTTC||0;
+    else clientsMap[name].totalImpaye+=inv.totalTTC||0;
+    clientsMap[name].count++;
+    if(!clientsMap[name].derniereFacture||inv.date>clientsMap[name].derniereFacture)clientsMap[name].derniereFacture=inv.date;
+  });
+  const clients=Object.values(clientsMap).sort((a,b)=>b.totalFacture-a.totalFacture);
+  const notes=load('clients_notes',{});
+  if(clients.length===0)return'<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">👥</div><p>Aucun client — creez des factures pour voir vos clients ici</p></div>';
+  return'<div class="gr g3 kpi-grid" style="margin-bottom:16px">'+
+    '<div class="cd kpi"><div class="kpi-v" style="color:var(--acc)">'+clients.length+'</div><div class="kpi-l">Clients</div></div>'+
+    '<div class="cd kpi"><div class="kpi-v" style="color:var(--grn)">'+fmt(clients.reduce(function(s,c){return s+c.totalPaye},0))+'</div><div class="kpi-l">Total paye</div></div>'+
+    '<div class="cd kpi"><div class="kpi-v" style="color:var(--red)">'+fmt(clients.reduce(function(s,c){return s+c.totalImpaye},0))+'</div><div class="kpi-l">Total impaye</div></div>'+
+  '</div>'+
+  '<div class="cd"><div class="cd-t">👥 Fichier clients ('+clients.length+')</div>'+
+  '<div class="tbl-wrap"><table><thead><tr><th>Client</th><th>Factures</th><th style="text-align:right">Total</th><th style="text-align:right">Paye</th><th style="text-align:right">Impaye</th><th>Derniere</th><th>Notes</th><th></th></tr></thead><tbody>'+
+  clients.map(function(c){return'<tr style="cursor:pointer" onclick="showClientDetail(\''+c.name.replace(/'/g,"\\'")+'\')">'+
+    '<td style="font-weight:700">'+c.name+'</td><td>'+c.count+'</td>'+
+    '<td style="text-align:right;font-weight:600">'+fmt(c.totalFacture)+'</td>'+
+    '<td style="text-align:right;color:var(--grn)">'+fmt(c.totalPaye)+'</td>'+
+    '<td style="text-align:right;color:'+(c.totalImpaye>0?'var(--red)':'var(--tx3)')+'">'+fmt(c.totalImpaye)+'</td>'+
+    '<td style="white-space:nowrap">'+fmtD(c.derniereFacture)+'</td>'+
+    '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--tx3)">'+(notes[c.name]||'')+'</td>'+
+    '<td><button class="bt bt-s sm" onclick="event.stopPropagation();editClientNote(\''+c.name.replace(/'/g,"\\'")+'\')">\u{1F4DD}</button></td>'+
+  '</tr>'}).join('')+
+  '</tbody></table></div></div>';
+}
+
+window.showClientDetail=function(name){
+  var invs=load('invoices',[]).filter(function(i){return(i.clientName||'').trim()===name});
+  var notes=load('clients_notes',{});
+  var m=document.createElement('div');m.className='modal-bg';m.onclick=function(e){if(e.target===m)m.remove()};
+  var totalTTC=invs.reduce(function(s,i){return s+(i.totalTTC||0)},0);
+  var paye=invs.filter(function(i){return i.paid}).reduce(function(s,i){return s+(i.totalTTC||0)},0);
+  m.innerHTML='<div class="modal fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>\u{1F464} '+name+'</h3><button class="bt bt-s sm" onclick="this.closest(\'.modal-bg\').remove()">\u2715</button></div>'+
+  '<div class="gr g3 kpi-grid" style="margin-bottom:14px">'+
+    '<div class="cd kpi" style="margin-bottom:0"><div class="kpi-v" style="font-size:20px;color:var(--acc)">'+fmt(totalTTC)+'</div><div class="kpi-l">Total TTC</div></div>'+
+    '<div class="cd kpi" style="margin-bottom:0"><div class="kpi-v" style="font-size:20px;color:var(--grn)">'+fmt(paye)+'</div><div class="kpi-l">Paye</div></div>'+
+    '<div class="cd kpi" style="margin-bottom:0"><div class="kpi-v" style="font-size:20px;color:var(--red)">'+fmt(totalTTC-paye)+'</div><div class="kpi-l">Impaye</div></div>'+
+  '</div>'+
+  (notes[name]?'<div class="al al-i" style="margin-bottom:14px">\u{1F4DD} '+notes[name]+'</div>':'')+
+  '<div class="tbl-wrap"><table><thead><tr><th>N\u00B0</th><th>Date</th><th>Objet</th><th style="text-align:right">TTC</th><th>Statut</th></tr></thead><tbody>'+
+  invs.sort(function(a,b){return b.num-a.num}).map(function(inv){
+    var overdue=!inv.paid&&new Date(inv.due)<new Date();
+    return'<tr><td style="font-weight:700">F-'+String(inv.num).padStart(4,'0')+'</td><td style="white-space:nowrap">'+fmtD(inv.date)+'</td><td>'+(inv.objet||'')+'</td><td style="text-align:right;font-weight:700">'+fmt(inv.totalTTC)+'</td><td>'+(inv.paid?'<span class="tg t-grn">Payee</span>':overdue?'<span class="tg t-red">Retard</span>':'<span class="tg t-org">Attente</span>')+'</td></tr>';
+  }).join('')+
+  '</tbody></table></div></div>';
+  document.body.appendChild(m);
+};
+
+window.editClientNote=function(name){
+  var notes=load('clients_notes',{});
+  var cur=notes[name]||'';
+  var val=prompt('Note pour '+name+' :',cur);
+  if(val!==null){notes[name]=val;save('clients_notes',notes);renderPage();}
+};
+
+// ============ AMORTISSEMENTS ============
+function renderAmortissements(el){
+  const immos=load('immobilisations',[]);
+  const totalDotation=immos.reduce(function(s,im){return s+calcDotation(im,currentExercice)},0);
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🏭 Amortissements ${currentExercice}</h2><div class="top-s">Tableau d'amortissement des immobilisations</div></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700" onchange="setExercice(this.value)">
+        ${getExercices().concat([currentExercice]).filter((v,i,a)=>a.indexOf(v)===i).sort().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>${y}</option>`).join('')}
+      </select>
+      <button class="bt bt-p" onclick="openNewImmo()">+ Immobilisation</button>
+    </div>
+  </div>
+
+  <div class="gr g3 kpi-grid" style="margin-bottom:16px">
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--acc)">${immos.length}</div><div class="kpi-l">Immobilisations</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--blu)">${fmt(immos.reduce((s,im)=>s+im.montantHT,0))}</div><div class="kpi-l">Total brut</div></div>
+    <div class="cd kpi"><div class="kpi-v" style="color:var(--org)">${fmt(totalDotation)}</div><div class="kpi-l">Dotation ${currentExercice}</div></div>
+  </div>
+
+  ${immos.length===0?`<div class="cd" style="text-align:center;padding:40px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">🏭</div><p>Aucune immobilisation — ajoutez vos biens amortissables</p></div>`:`
+  <div class="cd"><div class="cd-t">Immobilisations (${immos.length})</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Nom</th><th>Date</th><th style="text-align:right">Montant HT</th><th>Duree</th><th>Methode</th><th style="text-align:right">VNC</th><th style="text-align:right">Dotation ${currentExercice}</th><th></th></tr></thead><tbody>
+  ${immos.map((im,idx)=>{
+    const vnc=calcVNC(im,currentExercice);
+    const dot=calcDotation(im,currentExercice);
+    return`<tr style="cursor:pointer" onclick="toggleAmortDetail(${idx})">
+      <td style="font-weight:700">${im.nom}</td><td style="white-space:nowrap">${fmtD(im.dateAchat)}</td>
+      <td style="text-align:right;font-weight:600">${fmt(im.montantHT)}</td><td>${im.duree} ans</td><td>${im.methode==='degressif'?'Degressif':'Lineaire'}</td>
+      <td style="text-align:right;color:var(--blu)">${fmt(vnc)}</td>
+      <td style="text-align:right;color:var(--org);font-weight:700">${dot>0?fmt(dot):'-'}</td>
+      <td><button class="bt bt-d sm" onclick="event.stopPropagation();delImmo(${idx})">✕</button></td>
+    </tr>
+    <tr id="amort-detail-${idx}" style="display:none"><td colspan="8" style="padding:0">
+      <div style="padding:12px;background:var(--bg3)">
+        <div style="font-size:11px;font-weight:700;margin-bottom:8px;color:var(--tx2)">Echeancier annuel — ${im.nom}</div>
+        <table style="font-size:11px"><thead><tr><th>Annee</th><th style="text-align:right">Base</th><th style="text-align:right">Dotation</th><th style="text-align:right">Cumul</th><th style="text-align:right">VNC fin</th></tr></thead><tbody>
+        ${buildAmortSchedule(im).map(r=>`<tr style="${r.annee===currentExercice?'background:rgba(10,104,71,.08);font-weight:700':''}"><td>${r.annee}</td><td style="text-align:right">${fmt(r.base)}</td><td style="text-align:right">${fmt(r.dotation)}</td><td style="text-align:right">${fmt(r.cumul)}</td><td style="text-align:right">${fmt(r.vnc)}</td></tr>`).join('')}
+        </tbody></table>
+      </div>
+    </td></tr>`;
+  }).join('')}
+  </tbody></table></div></div>`}`;
+}
+
+function calcDotation(im,year){
+  const startYear=new Date(im.dateAchat).getFullYear();
+  const idx=year-startYear;
+  if(idx<0||idx>=im.duree)return 0;
+  if(im.methode==='degressif'){
+    const schedule=buildAmortSchedule(im);
+    const row=schedule.find(r=>r.annee===year);
+    return row?row.dotation:0;
+  }
+  return im.montantHT/im.duree;
+}
+
+function calcVNC(im,year){
+  const schedule=buildAmortSchedule(im);
+  const row=schedule.find(r=>r.annee===year);
+  if(row)return row.vnc;
+  const startYear=new Date(im.dateAchat).getFullYear();
+  if(year<startYear)return im.montantHT;
+  return 0;
+}
+
+function buildAmortSchedule(im){
+  const rows=[];
+  const startYear=new Date(im.dateAchat).getFullYear();
+  let cumul=0;let vncStart=im.montantHT;
+  if(im.methode==='degressif'){
+    const coeff=im.duree<=4?1.25:im.duree<=6?1.75:2.25;
+    const tauxDeg=(1/im.duree)*coeff;
+    for(let i=0;i<im.duree;i++){
+      const remaining=im.duree-i;
+      const dotDeg=vncStart*tauxDeg;
+      const dotLin=vncStart/remaining;
+      const dot=Math.max(dotDeg,dotLin);
+      const dotFinal=Math.min(dot,vncStart);
+      cumul+=dotFinal;
+      const base=vncStart;
+      vncStart-=dotFinal;
+      rows.push({annee:startYear+i,base:Math.round(base*100)/100,dotation:Math.round(dotFinal*100)/100,cumul:Math.round(cumul*100)/100,vnc:Math.round(Math.max(vncStart,0)*100)/100});
+    }
+  }else{
+    const dot=im.montantHT/im.duree;
+    for(let i=0;i<im.duree;i++){
+      cumul+=dot;
+      vncStart-=dot;
+      rows.push({annee:startYear+i,base:im.montantHT,dotation:Math.round(dot*100)/100,cumul:Math.round(cumul*100)/100,vnc:Math.round(Math.max(vncStart,0)*100)/100});
+    }
+  }
+  return rows;
+}
+
+window.toggleAmortDetail=function(idx){
+  const el=document.getElementById('amort-detail-'+idx);
+  if(el)el.style.display=el.style.display==='none'?'table-row':'none';
+};
+
+window.openNewImmo=function(){
+  const m=document.createElement('div');m.className='modal-bg';m.onclick=function(e){if(e.target===m)m.remove()};
+  m.innerHTML='<div class="modal fade"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>Nouvelle immobilisation</h3><button class="bt bt-s sm" onclick="this.closest(\'.modal-bg\').remove()">\u2715</button></div>'+
+  '<div class="fg"><label>Nom du bien</label><input class="inp" id="immoNom" placeholder="Vehicule, Materiel informatique..."></div>'+
+  '<div class="gr g2">'+
+    '<div class="fg"><label>Date d\'achat</label><input class="inp" type="date" id="immoDate" value="'+today()+'"></div>'+
+    '<div class="fg"><label>Montant HT (\u20AC)</label><input class="inp" type="number" id="immoMontant" step="0.01"></div>'+
+  '</div>'+
+  '<div class="gr g2">'+
+    '<div class="fg"><label>Duree (ans)</label><select class="inp" id="immoDuree"><option value="3">3 ans</option><option value="5" selected>5 ans</option><option value="7">7 ans</option><option value="10">10 ans</option><option value="15">15 ans</option></select></div>'+
+    '<div class="fg"><label>Methode</label><select class="inp" id="immoMethode"><option value="lineaire">Lineaire</option><option value="degressif">Degressif</option></select></div>'+
+  '</div>'+
+  '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end"><button class="bt bt-s" onclick="this.closest(\'.modal-bg\').remove()">Annuler</button><button class="bt bt-p" onclick="saveImmo()">Ajouter</button></div></div>';
+  document.body.appendChild(m);
+};
+
+window.saveImmo=function(){
+  var nom=$('#immoNom')&&$('#immoNom').value?$('#immoNom').value.trim():'';
+  var dateAchat=$('#immoDate')?$('#immoDate').value:'';
+  var montantHT=+($('#immoMontant')?$('#immoMontant').value:0)||0;
+  var duree=+($('#immoDuree')?$('#immoDuree').value:5)||5;
+  var methode=$('#immoMethode')?$('#immoMethode').value:'lineaire';
+  if(!nom||!montantHT){alert('Remplissez le nom et le montant');return;}
+  var immos=load('immobilisations',[]);
+  immos.push({id:uid(),nom:nom,dateAchat:dateAchat,montantHT:montantHT,duree:duree,methode:methode});
+  save('immobilisations',immos);
+  var bg=document.querySelector('.modal-bg');if(bg)bg.remove();
+  renderPage();
+};
+
+window.delImmo=function(idx){
+  if(!confirm('Supprimer cette immobilisation ?'))return;
+  var immos=load('immobilisations',[]);
+  immos.splice(idx,1);
+  save('immobilisations',immos);
+  renderPage();
+};
+
+// ============ BUDGET PREVISIONNEL ============
+function renderBudget(el){
+  const year=currentExercice;
+  const budgetKey='budget_'+year;
+  const targets=load(budgetKey,{caObj:0,depMax:0});
+  const months=['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec'];
+
+  const fExo=facturesExo();
+  const dExo=depensesExo();
+
+  const caByMonth=Array(12).fill(0);
+  const depByMonth=Array(12).fill(0);
+  fExo.forEach(f=>{if(f.date){const mo=new Date(f.date).getMonth();caByMonth[mo]+=f.ht||0;}});
+  dExo.forEach(d=>{if(d.date){const mo=new Date(d.date).getMonth();depByMonth[mo]+=Math.abs(d.ht||d.montant||0);}});
+
+  const totalCA=caByMonth.reduce((s,v)=>s+v,0);
+  const totalDep=depByMonth.reduce((s,v)=>s+v,0);
+  const caAnnuel=targets.caObj*12;
+  const depAnnuel=targets.depMax*12;
+  const pcCA=caAnnuel>0?Math.min(totalCA/caAnnuel*100,100):0;
+  const pcDep=depAnnuel>0?Math.min(totalDep/depAnnuel*100,100):0;
+
+  el.innerHTML=`
+  <div class="top"><div><h2>🎯 Budget previsionnel ${year}</h2><div class="top-s">Objectifs vs realise — suivi mensuel</div></div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <select class="inp" style="width:auto;padding:6px 28px 6px 10px;font-size:12px;font-weight:700" onchange="setExercice(this.value)">
+        ${getExercices().concat([currentExercice]).filter((v,i,a)=>a.indexOf(v)===i).sort().map(y=>`<option value="${y}" ${y===currentExercice?'selected':''}>${y}</option>`).join('')}
+      </select>
+    </div>
+  </div>
+
+  <!-- Objectifs -->
+  <div class="cd" style="margin-bottom:16px">
+    <div class="cd-t">Definir les objectifs mensuels</div>
+    <div class="gr g2">
+      <div class="fg"><label>CA objectif / mois</label><input class="inp" type="number" id="budgetCA" value="${targets.caObj||''}" onchange="saveBudgetTargets()"></div>
+      <div class="fg"><label>Depenses max / mois</label><input class="inp" type="number" id="budgetDep" value="${targets.depMax||''}" onchange="saveBudgetTargets()"></div>
+    </div>
+  </div>
+
+  <!-- Progress annuel -->
+  ${caAnnuel>0||depAnnuel>0?`
+  <div class="gr g2" style="margin-bottom:16px">
+    <div class="cd">
+      <div class="cd-t">CA annuel — ${fmt(totalCA)} / ${fmt(caAnnuel)}</div>
+      <div style="background:var(--bg4);border-radius:8px;height:24px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;border-radius:8px;background:${pcCA>=80?'var(--grn)':pcCA>=50?'var(--org)':'var(--red)'};width:${pcCA}%;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">${pcCA.toFixed(0)}%</div>
+      </div>
+      <div style="font-size:11px;color:var(--tx3)">${pcCA>=100?'Objectif atteint !':'Reste '+fmt(caAnnuel-totalCA)+' pour atteindre l\'objectif'}</div>
+    </div>
+    <div class="cd">
+      <div class="cd-t">Depenses annuelles — ${fmt(totalDep)} / ${fmt(depAnnuel)}</div>
+      <div style="background:var(--bg4);border-radius:8px;height:24px;overflow:hidden;margin-bottom:6px">
+        <div style="height:100%;border-radius:8px;background:${pcDep<=80?'var(--grn)':pcDep<=100?'var(--org)':'var(--red)'};width:${Math.min(pcDep,100)}%;transition:width .3s;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff">${pcDep.toFixed(0)}%</div>
+      </div>
+      <div style="font-size:11px;color:var(--tx3)">${pcDep>100?'Budget depasse de '+fmt(totalDep-depAnnuel)+' !':'Reste '+fmt(depAnnuel-totalDep)+' de budget'}</div>
+    </div>
+  </div>`:''}
+
+  <!-- Tableau mensuel -->
+  <div class="cd"><div class="cd-t">Detail mensuel ${year}</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Mois</th><th style="text-align:right">Obj. CA</th><th style="text-align:right">Reel CA</th><th style="text-align:right">Ecart CA</th><th style="text-align:right">Max Dep.</th><th style="text-align:right">Reel Dep.</th><th style="text-align:right">Ecart Dep.</th></tr></thead><tbody>
+  ${months.map((mo,i)=>{
+    const ecartCA=caByMonth[i]-(targets.caObj||0);
+    const ecartDep=(targets.depMax||0)-depByMonth[i];
+    const caColor=caByMonth[i]===0&&!targets.caObj?'var(--tx3)':ecartCA>=0?'var(--grn)':'var(--red)';
+    const depColor=depByMonth[i]===0&&!targets.depMax?'var(--tx3)':ecartDep>=0?'var(--grn)':'var(--red)';
+    return'<tr><td style="font-weight:600">'+mo+'</td>'+
+      '<td style="text-align:right;color:var(--tx3)">'+(targets.caObj?fmt(targets.caObj):'-')+'</td>'+
+      '<td style="text-align:right;font-weight:700">'+(caByMonth[i]?fmt(caByMonth[i]):'-')+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:'+caColor+'">'+(targets.caObj&&caByMonth[i]?fmt(ecartCA):'-')+'</td>'+
+      '<td style="text-align:right;color:var(--tx3)">'+(targets.depMax?fmt(targets.depMax):'-')+'</td>'+
+      '<td style="text-align:right;font-weight:700">'+(depByMonth[i]?fmt(depByMonth[i]):'-')+'</td>'+
+      '<td style="text-align:right;font-weight:600;color:'+depColor+'">'+(targets.depMax&&depByMonth[i]?fmt(ecartDep):'-')+'</td></tr>';
+  }).join('')}
+  <tr style="font-weight:800;border-top:2px solid var(--brd)">
+    <td>TOTAL</td>
+    <td style="text-align:right">${targets.caObj?fmt(caAnnuel):'-'}</td>
+    <td style="text-align:right">${fmt(totalCA)}</td>
+    <td style="text-align:right;color:${totalCA>=caAnnuel?'var(--grn)':'var(--red)'}">${caAnnuel?fmt(totalCA-caAnnuel):'-'}</td>
+    <td style="text-align:right">${targets.depMax?fmt(depAnnuel):'-'}</td>
+    <td style="text-align:right">${fmt(totalDep)}</td>
+    <td style="text-align:right;color:${totalDep<=depAnnuel?'var(--grn)':'var(--red)'}">${depAnnuel?fmt(depAnnuel-totalDep):'-'}</td>
+  </tr>
+  </tbody></table></div></div>`;
+}
+
+window.saveBudgetTargets=function(){
+  const year=currentExercice;
+  const budgetKey='budget_'+year;
+  const caObj=+($('#budgetCA')?$('#budgetCA').value:0)||0;
+  const depMax=+($('#budgetDep')?$('#budgetDep').value:0)||0;
+  save(budgetKey,{caObj:caObj,depMax:depMax});
+  renderPage();
 };
 
 // Re-render with new nav
