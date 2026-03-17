@@ -2648,12 +2648,6 @@ function genEcrituresComptables(){
     ecritures.push({num:num,date:f.date,journal:'VE',lib:'Produit — '+(f.cat||'Vente'),debit:'',credit:compteVente,debitM:0,creditM:f.ht||0,id:f.id+'_ht'});
     // Credit: TVA collectee
     if(tvaAmt>0)ecritures.push({num:num,date:f.date,journal:'VE',lib:'TVA collectee '+((f.tva||0))+'%',debit:'',credit:'4457',debitM:0,creditM:tvaAmt,id:f.id+'_tva'});
-    // Si paye: Debit 512 Banque / Credit 411 Client (encaissement)
-    if(f.paye){
-      num++;
-      ecritures.push({num:num,date:f.date,journal:'BQ',lib:'Encaissement '+(f.client||f.desc||''),debit:'512',credit:'',debitM:ttc,creditM:0,id:f.id+'_bq1'});
-      ecritures.push({num:num,date:f.date,journal:'BQ',lib:'Solde client',debit:'',credit:'411',debitM:0,creditM:ttc,id:f.id+'_bq2'});
-    }
     num++;
   });
 
@@ -2670,12 +2664,6 @@ function genEcrituresComptables(){
     if(tvaAmt>0)ecritures.push({num:num,date:d.date,journal:'AC',lib:'TVA deductible '+((d.tva||0))+'%',debit:'4456',credit:'',debitM:tvaAmt,creditM:0,id:d.id+'_tva'});
     // Credit: Fournisseur pour le TTC
     ecritures.push({num:num,date:d.date,journal:'AC',lib:'Fournisseur — '+(d.desc||'').substring(0,30),debit:'',credit:'401',debitM:0,creditM:ttc,id:d.id+'_401'});
-    // Si paye (src banque ou frais): Debit 401 Fournisseur / Credit 512 Banque (decaissement)
-    if(d.src==='banque'||d.src==='frais'){
-      num++;
-      ecritures.push({num:num,date:d.date,journal:'BQ',lib:'Paiement '+(d.desc||'').substring(0,30),debit:'401',credit:'',debitM:ttc,creditM:0,id:d.id+'_bq1'});
-      ecritures.push({num:num,date:d.date,journal:'BQ',lib:'Decaissement',debit:'',credit:'512',debitM:0,creditM:ttc,id:d.id+'_bq2'});
-    }
     num++;
   });
 
