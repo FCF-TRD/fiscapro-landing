@@ -2617,6 +2617,7 @@ const PCG={
   '613':'Loyers','616':'Assurances','622':'Honoraires','623':'Publicité',
   '625':'Déplacements','626':'Frais postaux et télécom','627':'Services bancaires',
   '631':'Impôts et taxes','641':'Rémunérations du personnel','645':'Charges sociales',
+  '618':'Divers (formation, doc)','625':'Déplacements, missions','627':'Services bancaires',
   '681':'Dotations amortissements','701':'Ventes de produits finis','706':'Prestations de services',
   '707':'Ventes de marchandises','708':'Produits activités annexes','741':'Subventions','791':'Transferts de charges'
 };
@@ -2632,22 +2633,52 @@ const COMPTE_MAP={
 // ============ V3: JOURNAL & GRAND LIVRE ============
 function genEcrituresComptables(){
   const ecritures=[];let num=1;
-  factures.forEach(f=>{
+  const noTVA=company?.regimeTVA==='franchise'||company?.regimeTVA==='exoneree';
+  const fExo=facturesExo();const dExo=depensesExo();
+
+  // JOURNAL DES VENTES (VE)
+  // Debit 411 Clients (TTC) / Credit 706 Ventes (HT) + Credit 4457 TVA collectee
+  fExo.forEach(f=>{
     const compteVente=COMPTE_MAP[f.cat]||'706';
-    const tvaAmt=(f.ht||0)*((f.tva||0)/100);
+    const tvaAmt=noTVA?0:(f.ht||0)*((f.tva||0)/100);
     const ttc=(f.ht||0)+tvaAmt;
-    ecritures.push({num:num,date:f.date,journal:'VE',lib:f.desc||f.client||'Vente',debit:'411',credit:compteVente,debitM:ttc,creditM:f.ht,id:f.id});
-    if(tvaAmt>0)ecritures.push({num:num,date:f.date,journal:'VE',lib:'TVA collectée',debit:'',credit:'4457',debitM:0,creditM:tvaAmt,id:f.id+'_tva'});
+    // Debit: Client pour le TTC
+    ecritures.push({num:num,date:f.date,journal:'VE',lib:(f.client||f.desc||'Vente')+' — F'+(f.id||'').substring(0,4),debit:'411',credit:'',debitM:ttc,creditM:0,id:f.id});
+    // Credit: Vente pour le HT
+    ecritures.push({num:num,date:f.date,journal:'VE',lib:'Produit — '+(f.cat||'Vente'),debit:'',credit:compteVente,debitM:0,creditM:f.ht||0,id:f.id+'_ht'});
+    // Credit: TVA collectee
+    if(tvaAmt>0)ecritures.push({num:num,date:f.date,journal:'VE',lib:'TVA collectee '+((f.tva||0))+'%',debit:'',credit:'4457',debitM:0,creditM:tvaAmt,id:f.id+'_tva'});
+    // Si paye: Debit 512 Banque / Credit 411 Client (encaissement)
+    if(f.paye){
+      num++;
+      ecritures.push({num:num,date:f.date,journal:'BQ',lib:'Encaissement '+(f.client||f.desc||''),debit:'512',credit:'',debitM:ttc,creditM:0,id:f.id+'_bq1'});
+      ecritures.push({num:num,date:f.date,journal:'BQ',lib:'Solde client',debit:'',credit:'411',debitM:0,creditM:ttc,id:f.id+'_bq2'});
+    }
     num++;
   });
-  depenses.forEach(d=>{
+
+  // JOURNAL DES ACHATS (AC)
+  // Debit 6xx Charge (HT) + Debit 4456 TVA deductible / Credit 401 Fournisseur (TTC)
+  dExo.forEach(d=>{
     const compteCharge=COMPTE_MAP[d.cat]||'602';
-    const tvaAmt=(d.ht||0)*((d.tva||0)/100);
+    const tvaRecuperable=(!noTVA&&d.tva>0);
+    const tvaAmt=tvaRecuperable?(d.ht||0)*((d.tva||0)/100):0;
     const ttc=(d.ht||0)+tvaAmt;
-    ecritures.push({num:num,date:d.date,journal:'AC',lib:d.desc||d.client||'Achat',debit:compteCharge,credit:'401',debitM:d.ht,creditM:ttc,id:d.id});
-    if(tvaAmt>0)ecritures.push({num:num,date:d.date,journal:'AC',lib:'TVA déductible',debit:'4456',credit:'',debitM:tvaAmt,creditM:0,id:d.id+'_tva'});
+    // Debit: Charge pour le HT
+    ecritures.push({num:num,date:d.date,journal:'AC',lib:(d.desc||d.cat||'Achat').substring(0,50),debit:compteCharge,credit:'',debitM:d.ht||0,creditM:0,id:d.id});
+    // Debit: TVA deductible (si recuperable)
+    if(tvaAmt>0)ecritures.push({num:num,date:d.date,journal:'AC',lib:'TVA deductible '+((d.tva||0))+'%',debit:'4456',credit:'',debitM:tvaAmt,creditM:0,id:d.id+'_tva'});
+    // Credit: Fournisseur pour le TTC
+    ecritures.push({num:num,date:d.date,journal:'AC',lib:'Fournisseur — '+(d.desc||'').substring(0,30),debit:'',credit:'401',debitM:0,creditM:ttc,id:d.id+'_401'});
+    // Si paye (src banque ou frais): Debit 401 Fournisseur / Credit 512 Banque (decaissement)
+    if(d.src==='banque'||d.src==='frais'){
+      num++;
+      ecritures.push({num:num,date:d.date,journal:'BQ',lib:'Paiement '+(d.desc||'').substring(0,30),debit:'401',credit:'',debitM:ttc,creditM:0,id:d.id+'_bq1'});
+      ecritures.push({num:num,date:d.date,journal:'BQ',lib:'Decaissement',debit:'',credit:'512',debitM:0,creditM:ttc,id:d.id+'_bq2'});
+    }
     num++;
   });
+
   return ecritures.sort((a,b)=>new Date(a.date)-new Date(b.date));
 }
 
